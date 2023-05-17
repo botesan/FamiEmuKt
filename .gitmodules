@@ -1,0 +1,3 @@
+[submodule "emulator/src/jvmTest/resources/nes-test-roms"]
+	path = emulator/src/jvmTest/resources/nes-test-roms
+	url = https://github.com/christopherpow/nes-test-roms.git
