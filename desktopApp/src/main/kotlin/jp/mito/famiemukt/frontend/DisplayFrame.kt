@@ -70,7 +70,7 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
         try {
             val iNesFile = File(iNesFilePath)
             val iNesData = iNesFile.readBytes()
-            val backupRAMFile = File(iNesFilePath.removeSuffix(suffix = iNesFile.extension) + ".sav")
+            val backupRAMFile = File(iNesFilePath.removeSuffix(suffix = iNesFile.extension) + "sav")
             val backupRAM = runCatching {
                 loadRetron5SavFile(input = backupRAMFile.readBytes())
             }.onFailure { it.printStackTrace() }.getOrNull() ?: BackupRAM()
