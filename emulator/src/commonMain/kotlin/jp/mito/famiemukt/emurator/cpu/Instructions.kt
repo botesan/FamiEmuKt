@@ -3,7 +3,7 @@ package jp.mito.famiemukt.emurator.cpu
 import jp.mito.famiemukt.emurator.cpu.Addressing.*
 import jp.mito.famiemukt.emurator.cpu.OpCode.*
 
-// http://hp.vector.co.jp/authors/VA042397/nes/6502.html
+// https://www.tekepen.com/nes/6502.html
 // https://www.masswerk.at/6502/6502_instruction_set.html
 
 enum class OpCode {

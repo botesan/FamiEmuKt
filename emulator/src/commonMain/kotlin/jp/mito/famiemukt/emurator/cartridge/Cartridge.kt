@@ -3,7 +3,7 @@ package jp.mito.famiemukt.emurator.cartridge
 import jp.mito.famiemukt.emurator.cartridge.mapper.Mapper
 
 /*
-http://hp.vector.co.jp/authors/VA042397/nes/adrmap.html
+https://www.tekepen.com/nes/adrmap.html
 アドレス	内容	ミラーアドレス
 $4020-$5FFF	拡張RAM(特殊なマッパー使用時)
 $6000-$7FFF	バッテリーバックアップRAM

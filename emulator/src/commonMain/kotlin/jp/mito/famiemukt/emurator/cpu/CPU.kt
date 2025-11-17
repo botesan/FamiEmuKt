@@ -93,8 +93,7 @@ class CPU(
 
     private fun execute(instruction: Instruction): Int {
         var addCycle = 0
-//        isBeforeRegisterI = cpuRegisters.P.I // TODO: 削除
-        // http://hp.vector.co.jp/authors/VA042397/nes/6502.html
+        // https://www.tekepen.com/nes/6502.html
         // https://www.masswerk.at/6502/6502_instruction_set.html
         when (instruction.opCode) {
             OpCode.Undefine -> error("Undefined command.")
@@ -499,7 +498,7 @@ class CPU(
                 val fetched = fetchOperand(addressing = instruction.addressing)
                 cpuRegisters.PC = fetched.operand.toUShort()
                 addCycle += fetched.addCycle
-//                printMovePCLog(command = "JMP") // TODO: ログ消去
+                //printMovePCLog(command = "JMP")
             }
             /* JSR サブルーチンを呼び出します。[0.0.0.0.0.0.0.0] */
             OpCode.JSR -> {
@@ -512,7 +511,7 @@ class CPU(
                 push(value = l)
                 cpuRegisters.PC = fetched.operand.toUShort()
                 addCycle += fetched.addCycle
-//                printMovePCLog(command = "JSR") // TODO: ログ消去
+                //printMovePCLog(command = "JSR")
             }
             /* RTS サブルーチンから復帰します。[0.0.0.0.0.0.0.0] */
             OpCode.RTS -> {
@@ -521,7 +520,7 @@ class CPU(
                 val h = pop()
                 val value = ((h.toUInt() shl 8) or (l.toUInt())) + 1U
                 cpuRegisters.PC = value.toUShort()
-//                printMovePCLog(command = "RTS") // TODO: ログ消去
+                //printMovePCLog(command = "RTS")
             }
             /* RTI 割り込みルーチンから復帰します。[N.V.R.B.D.I.Z.C]
                The status register is pulled with the break flag and bit 5 ignored.
@@ -536,7 +535,7 @@ class CPU(
                 val h = pop()
                 val pc = (h.toUInt() shl 8) or (l.toUInt())
                 cpuRegisters.PC = pc.toUShort()
-//                printMovePCLog(command = "RTI") // TODO: ログ消去
+                //printMovePCLog(command = "RTI")
             }
             /* BCC キャリーフラグがクリアされている時にブランチします。[0.0.0.0.0.0.0.0] */
             OpCode.BCC -> {
@@ -613,7 +612,7 @@ class CPU(
             /* CLC キャリーフラグをクリアします。[0.0.0.0.0.0.0.C] */
             OpCode.CLC -> {
                 cpuRegisters.P.C = false
-                printMovePCLog(command = "CLC") // TODO: ログ消去
+                printMovePCLog(command = "CLC")
             }
             /* CLD BCDモードから通常モードに戻ります。ファミコンでは実装されていません。[0.0.0.0.D.0.0.0] */
             OpCode.CLD -> {
@@ -834,7 +833,7 @@ class CPU(
                 cpuRegisters.P.C = ((resultU and 0x100U) != 0U)
             }
             // 未実装（非公式）
-            //else -> TODO("未実装 ${instruction.opCode}")
+            //else -> error("未実装 ${instruction.opCode}")
         }
         // 実行したオペコードを保持
         beforeExecutedOpCode = instruction.opCode
@@ -992,7 +991,7 @@ class CPU(
         if (interrupt != null && instruction != null && instruction.opCode === OpCode.BRK) {
             // BRK実行後状態、割り込みの乗っ取り処理（BRK <= NMI,IRQ）
             if (interrupt === NMI) {
-//                println("BRK <= NMI 2") // TODO: ログ削除
+                // println("BRK <= NMI 2")
                 // 呼び出しアドレスをNMIに変更
                 cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
                 // スタックのBフラグ解除
@@ -1000,7 +999,7 @@ class CPU(
                 push(value = s)
 
             } else if (interrupt === IRQ) {
-//                println("BRK <= IRQ 2") // TODO: ログ削除
+                //println("BRK <= IRQ 2")
                 // BRK実行後状態、呼び出しアドレスをIRQに変更（実質変更無し）
                 cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_IRQ)
                 // スタックのBフラグ解除
@@ -1017,7 +1016,7 @@ class CPU(
             executingCPUClockCount !in 1..4 -> Unit
             // 割り込みの乗っ取り処理（IRQ <= NMI）
             interrupt === IRQ && isRequestedNMI -> {
-//                println("IRQ <= NMI") // TODO: ログ削除
+                //println("IRQ <= NMI")
                 // IRQ実行後状態、呼び出しアドレスをNMIに変更
                 cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
                 // 乗っ取り割り込み保持
@@ -1026,11 +1025,11 @@ class CPU(
             // 割り込みの乗っ取り処理（BRK <= NMI,IRQ）
             instruction != null && instruction.opCode === OpCode.BRK -> {
                 if (isRequestedNMI) {
-//                    println("BRK <= NMI 1") // TODO: ログ削除
+                    //println("BRK <= NMI 1")
                     // BRK実行前状態、乗っ取り割り込み保持
                     hijackInterrupt = NMI
                 } else if (isRequestedIRQ) {
-//                    println("BRK <= IRQ 1") // TODO: ログ削除
+                    //println("BRK <= IRQ 1")
                     // BRK実行前状態、乗っ取り割り込み保持
                     hijackInterrupt = IRQ
                 }
@@ -1049,12 +1048,12 @@ class CPU(
 
     fun requestInterruptNMI() {
         isRequestedNMI = true
-//        println("requestInterruptNMI") // TODO: ログ消去
+        //println("requestInterruptNMI")
     }
 
     fun requestInterruptOnIRQ() {
         isRequestedIRQ = true
-//        println("requestInterruptOnIRQ") // TODO: ログ消去
+        //println("requestInterruptOnIRQ")
     }
 
     fun requestInterruptOffIRQ() {
@@ -1131,7 +1130,7 @@ class CPU(
                 // D        | 0             | unchanged
                 // V        | 0             | unchanged
                 // N        | 0             | unchanged
-                printMovePCLog(command = ">RESET") // TODO: ログ消去
+                printMovePCLog(command = ">RESET")
             }
 
             NMI -> {
@@ -1147,7 +1146,7 @@ class CPU(
                 // 割り込み
                 cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
                 cpuRegisters.P.I = true
-                printMovePCLog(command = ">NMI") // TODO: ログ消去
+                printMovePCLog(command = ">NMI")
             }
 
             IRQ -> {
@@ -1163,7 +1162,7 @@ class CPU(
                 // 割り込み
                 cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_IRQ)
                 cpuRegisters.P.I = true
-                printMovePCLog(command = ">IRQ") // TODO: ログ消去
+                printMovePCLog(command = ">IRQ")
             }
             /*
             https://www.masswerk.at/6502/6502_instruction_set.html#BRK
@@ -1194,7 +1193,7 @@ class CPU(
                 // when any interrupt is triggered (NMI, IRQ/BRK, or reset).
                 // Restored to its previous state from the stack when leaving an interrupt handler with RTI.
                 cpuRegisters.P.I = true
-                printMovePCLog(command = ">BRK") // TODO: ログ消去
+                printMovePCLog(command = ">BRK")
             }
         }
         beforePC = cpuRegisters.PC
@@ -1207,6 +1206,7 @@ class CPU(
     private var beforePC: UShort = 0u
     private var beforeExecutedOpCode: OpCode? = null
     private fun printMovePCLog(command: String) {
+        @Suppress("ConstantConditionIf")
         if (false) {
             val r = cpuRegisters
             println("${beforePC.toHex()} : ${command.padEnd(length = 6)} ${r.PC.toHex()}  / S:${r.S.toHex()} / ${r.P.value.toHex()} / $beforeExecutedOpCode")

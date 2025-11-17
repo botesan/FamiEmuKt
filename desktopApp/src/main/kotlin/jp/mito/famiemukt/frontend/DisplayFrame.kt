@@ -11,8 +11,8 @@ import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 import java.awt.geom.AffineTransform
 import java.awt.image.BufferedImage
 import java.io.File
@@ -59,6 +59,7 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
             writeBuffer[writeBufferPosition] = value.toByte()
             writeBufferPosition++
             if (writeBufferPosition >= writeBuffer.size) {
+                @Suppress("KotlinConstantConditions")
                 if (NO_WAIT.not()) line.write(writeBuffer, 0, writeBuffer.size)
                 writeBufferPosition = 0
             }
@@ -89,6 +90,7 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
                     EventQueue.invokeLater { repaint() }
                     // TODO: 音声出力に問題ありっぽい（パフォーマンス）
                     val sleepTime = nextTime - System.currentTimeMillis()
+                    @Suppress("KotlinConstantConditions", "SimplifyBooleanWithConstants")
                     if (sleepTime > 0 && NO_WAIT.not()) Thread.sleep(sleepTime) // TODO: 要調整？
                     nextTime = firstTime + (++frameCount) * 1_000 / 60
                 }
@@ -103,8 +105,8 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
         size = Dimension(256 * 5 + 2 * 20, 240 * 4 + 40 + 20)
-        addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent?) {
+        addWindowListener(object : WindowAdapter() {
+            override fun windowOpened(e: WindowEvent?) {
                 if (thread.state == Thread.State.NEW) {
                     thread.start()
                 }

@@ -7,7 +7,7 @@ import jp.mito.famiemukt.emurator.pad.Pad
 import jp.mito.famiemukt.emurator.ppu.PPU
 
 /*
-http://hp.vector.co.jp/authors/VA042397/nes/adrmap.html
+https://www.tekepen.com/nes/adrmap.html
 アドレス	内容	ミラーアドレス
 $0000-$07FF	WRAM
 $0800-$1FFF	未使用	$0000-$07FF

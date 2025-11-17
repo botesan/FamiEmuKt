@@ -3,7 +3,7 @@ package jp.mito.famiemukt.emurator.pad
 /*
 https://www.nesdev.org/wiki/Input_devices
 
-http://hp.vector.co.jp/authors/VA042397/nes/joypad.html
+https://www.tekepen.com/nes/joypad.html
 ジョイパッドには次のような手順でアクセスを行います。
     I/O【$4016】のbit0をセットする。
     I/O【$4016】のbit0をクリアする。
