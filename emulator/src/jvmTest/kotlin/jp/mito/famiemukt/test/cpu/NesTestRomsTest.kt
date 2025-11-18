@@ -12,7 +12,28 @@ import kotlin.test.fail
 @OptIn(ExperimentalUnsignedTypes::class, VisibleForTesting::class)
 class NesTestRomsTest {
     @Test
-    fun testInstrAllIncludeUnofficial() = checkRom("nes-test-roms/instr_test-v5/all_instrs.nes")
+    fun testInstrIncludeUnofficial_02() = checkRom("nes-test-roms/instr_test-v5/rom_singles/02-implied.nes")
+
+    @Test
+    fun testInstrIncludeUnofficial_03() = checkRom("nes-test-roms/instr_test-v5/rom_singles/03-immediate.nes")
+
+    @Test
+    fun testInstrIncludeUnofficial_04() = checkRom("nes-test-roms/instr_test-v5/rom_singles/04-zero_page.nes")
+
+    @Test
+    fun testInstrIncludeUnofficial_05() = checkRom("nes-test-roms/instr_test-v5/rom_singles/05-zp_xy.nes")
+
+    @Test
+    fun testInstrIncludeUnofficial_06() = checkRom("nes-test-roms/instr_test-v5/rom_singles/06-absolute.nes")
+
+    @Test
+    fun testInstrIncludeUnofficial_07() = checkRom("nes-test-roms/instr_test-v5/rom_singles/07-abs_xy.nes")
+
+    @Test
+    fun testInstrIncludeUnofficial_08() = checkRom("nes-test-roms/instr_test-v5/rom_singles/08-ind_x.nes")
+
+    @Test
+    fun testInstrIncludeUnofficial_09() = checkRom("nes-test-roms/instr_test-v5/rom_singles/09-ind_y.nes")
 
     ///////////////////////////////////
 

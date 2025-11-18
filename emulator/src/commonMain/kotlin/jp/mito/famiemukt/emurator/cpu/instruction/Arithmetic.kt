@@ -1,0 +1,290 @@
+package jp.mito.famiemukt.emurator.cpu.instruction
+
+import jp.mito.famiemukt.emurator.cpu.CPUBus
+import jp.mito.famiemukt.emurator.cpu.CPURegisters
+import jp.mito.famiemukt.emurator.cpu.Instruction
+
+// （広い意味での）算術命令
+// https://www.tekepen.com/nes/6502.html
+// https://www.masswerk.at/6502/6502_instruction_set.html
+//  Arithmetic Operations
+//   ADC SBC
+//  Decrements & Increments
+//   DEC DEX DEY INC INX INY
+//  Logical Operations
+//   AND EOR ORA
+//  Shift & Rotate Instructions
+//   ASL LSR ROL ROR
+//  Comparisons
+//   CMP CPX CPY
+//  Bit Test
+//   BIT
+
+/* ADC (A + メモリ + キャリーフラグ) を演算して結果をAへ返します。[N.V.0.0.0.0.Z.C] */
+object ADC : OfficialOpCode(name = "ADC") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val a = registers.A
+        val memory = instruction.addressing.read(operand, bus)
+        val carry = if (registers.P.C) 1 else 0
+        val resultS = a.toByte() + memory.toByte() + carry
+        val resultU = a + memory + carry.toUInt()
+        registers.A = resultU.toUByte()
+        registers.P.N = resultU.toByte() < 0
+        registers.P.V = (resultS < Byte.MIN_VALUE || resultS > Byte.MAX_VALUE)
+        registers.P.Z = (resultU.toByte() == 0.toByte())
+        registers.P.C = ((resultU and 0x100U) != 0U)
+        return operand.addCycle
+    }
+}
+
+/* SBC (A - メモリ - キャリーフラグの反転) を演算して結果をAへ返します。[N.V.0.0.0.0.Z.C] */
+object SBC : OfficialOpCode(name = "SBC") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val a = registers.A
+        val memory = instruction.addressing.read(operand, bus)
+        val carry = if (registers.P.C.not()) 1 else 0
+        val resultS = a.toByte() - memory.toByte() - carry
+        val resultU = a - memory - carry.toUInt()
+        registers.A = resultU.toUByte()
+        registers.P.N = resultU.toByte() < 0
+        registers.P.V = (resultS < Byte.MIN_VALUE || resultS > Byte.MAX_VALUE)
+        registers.P.Z = (resultU.toByte() == 0.toByte())
+        registers.P.C = ((resultU and 0x100U) == 0U)
+        return operand.addCycle
+    }
+}
+
+/* DEC メモリをデクリメントします。[N.0.0.0.0.0.Z.0] */
+object DEC : OfficialOpCode(name = "DEC") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = bus.readMemIO(address = operand.operand)
+        val result = (memory - 1U).toUByte()
+        bus.writeMemIO(address = operand.operand, value = result)
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return operand.addCycle
+    }
+}
+
+/* DEX Xをデクリメントします。[N.0.0.0.0.0.Z.0] */
+object DEX : OfficialOpCode(name = "DEX") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val result = (registers.X - 1U).toUByte()
+        registers.X = result
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return 0
+    }
+}
+
+/* DEY Yをデクリメントします。[N.0.0.0.0.0.Z.0] */
+object DEY : OfficialOpCode(name = "DEY") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val result = (registers.Y - 1U).toUByte()
+        registers.Y = result
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return 0
+    }
+}
+
+/* INC メモリをインクリメントします。[N.0.0.0.0.0.Z.0] */
+object INC : OfficialOpCode(name = "INC") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = bus.readMemIO(address = operand.operand)
+        val result = (memory + 1U).toUByte()
+        bus.writeMemIO(address = operand.operand, value = result)
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return operand.addCycle
+    }
+}
+
+/* INX Xをインクリメントします。[N.0.0.0.0.0.Z.0] */
+object INX : OfficialOpCode(name = "INX") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val result = (registers.X + 1U).toUByte()
+        registers.X = result
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return 0
+    }
+}
+
+/* INY Yをインクリメントします。[N.0.0.0.0.0.Z.0] */
+object INY : OfficialOpCode(name = "INY") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val result = (registers.Y + 1U).toUByte()
+        registers.Y = result
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return 0
+    }
+}
+
+/* AND Aとメモリを論理AND演算して結果をAへ返します。[N.0.0.0.0.0.Z.0] */
+object AND : OfficialOpCode(name = "AND") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = instruction.addressing.read(operand, bus)
+        val result = registers.A and memory
+        registers.A = result
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return operand.addCycle
+    }
+}
+
+/* EOR Aとメモリを論理XOR演算して結果をAへ返します。[N.0.0.0.0.0.Z.0] */
+object EOR : OfficialOpCode(name = "EOR") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = instruction.addressing.read(operand, bus)
+        val result = registers.A xor memory
+        registers.A = result
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return operand.addCycle
+    }
+}
+
+/* ORA Aとメモリを論理OR演算して結果をAへ返します。[N.0.0.0.0.0.Z.0] */
+object ORA : OfficialOpCode(name = "ORA") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = instruction.addressing.read(operand, bus)
+        val result = registers.A or memory
+        registers.A = result
+        registers.P.N = result.toByte() < 0
+        registers.P.Z = (result == 0.toUByte())
+        return operand.addCycle
+    }
+}
+
+/* ASL Aまたはメモリを左へシフトします。[N.0.0.0.0.0.Z.C] */
+object ASL : OfficialOpCode(name = "ASL") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val aOrMemory = instruction.addressing.read(operand, bus)
+        val result = aOrMemory.toUInt() shl 1
+        instruction.addressing.write(result.toUByte(), operand, bus, registers)
+        registers.P.N = result.toUByte().toByte() < 0
+        registers.P.Z = (result.toUByte() == 0.toUByte())
+        registers.P.C = ((result and 0x100U) != 0U)
+        return operand.addCycle
+    }
+}
+
+/* LSR Aまたはメモリを右へシフトします。[N.0.0.0.0.0.Z.C]
+   Shift One Bit Right (Memory or Accumulator) / 0 -> [76543210] -> C */
+object LSR : OfficialOpCode(name = "LSR") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val aOrMemory = instruction.addressing.read(operand, bus)
+        val result = aOrMemory.toUInt() shr 1
+        instruction.addressing.write(result.toUByte(), operand, bus, registers)
+        registers.P.N = result.toUByte().toByte() < 0
+        registers.P.Z = (result == 0U)
+        registers.P.C = ((aOrMemory.toUInt() and 0x01U) != 0U)
+        return operand.addCycle
+    }
+}
+
+/* ROL Aまたはメモリを左へローテートします。[N.0.0.0.0.0.Z.C]
+   Rotate One Bit Left (Memory or Accumulator) / C <- [76543210] <- C */
+object ROL : OfficialOpCode(name = "ROL") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val aOrMemory = instruction.addressing.read(operand, bus)
+        val result = if (registers.P.C) {
+            (aOrMemory.toUInt() shl 1) or 0x01U
+        } else {
+            (aOrMemory.toUInt() shl 1)
+        }
+        instruction.addressing.write(result.toUByte(), operand, bus, registers)
+        registers.P.N = result.toUByte().toByte() < 0
+        registers.P.Z = (result.toUByte() == 0.toUByte())
+        registers.P.C = ((result and 0x100U) != 0U)
+        return operand.addCycle
+    }
+}
+
+/* ROR Aまたはメモリを右へローテートします。[N.0.0.0.0.0.Z.C]
+   Rotate One Bit Right (Memory or Accumulator) / C -> [76543210] -> C */
+object ROR : OfficialOpCode(name = "ROR") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val aOrMemory = instruction.addressing.read(operand, bus)
+        val result = if (registers.P.C) {
+            (aOrMemory.toUInt() shr 1) or 0b1000_0000U
+        } else {
+            (aOrMemory.toUInt() shr 1)
+        }
+        instruction.addressing.write(result.toUByte(), operand, bus, registers)
+        registers.P.N = result.toUByte().toByte() < 0
+        registers.P.Z = (result == 0U)
+        registers.P.C = ((aOrMemory.toUInt() and 0x001U) != 0U)
+        return operand.addCycle
+    }
+}
+
+/* CMP Aとメモリを比較演算します。[N.0.0.0.0.0.Z.C]
+   Compare Memory with Accumulator A - M */
+object CMP : OfficialOpCode(name = "CMP") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = instruction.addressing.read(operand, bus)
+        val result = registers.A - memory
+        registers.P.N = result.toUByte().toByte() < 0
+        registers.P.Z = (result == 0U)
+        registers.P.C = ((result and 0x100U) == 0U)
+        return operand.addCycle
+    }
+}
+
+/* CPX Xとメモリを比較演算します。[N.0.0.0.0.0.Z.C]
+   Compare Memory and Index X. X - M */
+object CPX : OfficialOpCode(name = "CPX") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = instruction.addressing.read(operand, bus)
+        val result = registers.X - memory
+        registers.P.N = result.toUByte().toByte() < 0
+        registers.P.Z = (result == 0U)
+        registers.P.C = ((result and 0x100U) == 0U)
+        return operand.addCycle
+    }
+}
+
+/* CPY Yとメモリを比較演算します。[N.0.0.0.0.0.Z.C]
+   Compare Memory and Index Y. Y - M */
+object CPY : OfficialOpCode(name = "CPY") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = instruction.addressing.read(operand, bus)
+        val result = registers.Y - memory
+        registers.P.N = result.toUByte().toByte() < 0
+        registers.P.Z = (result == 0U)
+        registers.P.C = ((result and 0x100U) == 0U)
+        return operand.addCycle
+    }
+}
+
+/* BIT Aとメモリをビット比較演算します。[N.V.0.0.0.0.Z.0]
+   bits 7 and 6 of operand are transfered to bit 7 and 6 of SR (N,V);
+   the zero-flag is set to the result of operand AND accumulator.  */
+object BIT : OfficialOpCode(name = "BIT") {
+    override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
+        val operand = instruction.addressing.operand(bus, registers)
+        val memory = instruction.addressing.read(operand, bus).toUInt()
+        val result = registers.A.toUInt() and memory
+        registers.P.N = ((memory and 0b1000_0000U) != 0U)
+        registers.P.Z = (result == 0U)
+        registers.P.V = ((memory and 0b0100_0000U) != 0U)
+        return operand.addCycle
+    }
+}
