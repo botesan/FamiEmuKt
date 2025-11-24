@@ -30,6 +30,7 @@ class Mapper067(
     private val chrRom: UByteArray,
 ) : MapperBase(cartridge = cartridge) {
     private val lastPRGBankNo: Int = cartridge.information.prgRom16Units - 1
+    private val prgBankNoMask: Int = (lastPRGBankNo.takeHighestOneBit() shl 1) - 1
     private var prgBankNo: Int = 0
     private var chrBankNo0: Int = 0
     private var chrBankNo1: Int = 0
@@ -139,7 +140,7 @@ class Mapper067(
                    | ++++- select a 16 KiB CHR ROM bank at CPU $8000-$BFFF. $C000-$FFFF is fixed to the last bank of PRG ROM.
                    +------ 1 bit latch, present but unused. Could be combined with an external OR gate to increase PRG capacity to 512KB. */
             0xF800 -> {
-                prgBankNo = value.toInt() and 0b0000_0111 // 0b0000_1111 TODO: ４ビット分ではない？３ビット分？
+                prgBankNo = value.toInt() and 0b0000_1111 and prgBankNoMask
             }
         }
     }
