@@ -78,7 +78,7 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
             val cartridge = Cartridge(backupRAM = backupRAM, iNesData = iNesData)
             val system = NesSystem(cartridge, audioSampleNotifier, AUDIO_SAMPLING_RATE)
             this.system = system
-            system.reset()
+            system.powerOn()
             var frameCount = 1L
             val firstTime = System.currentTimeMillis()
             var nextTime = firstTime + frameCount * 1_000 / 60

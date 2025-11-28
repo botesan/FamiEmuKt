@@ -1,6 +1,8 @@
 package jp.mito.famiemukt.emurator.cpu
 
 import jp.mito.famiemukt.emurator.NTSC_CPU_CYCLES_PER_MASTER_CLOCKS
+import jp.mito.famiemukt.emurator.cartridge.NothingStateObserver
+import jp.mito.famiemukt.emurator.cartridge.StateObserver
 import jp.mito.famiemukt.emurator.cpu.addressing.fetch
 import jp.mito.famiemukt.emurator.cpu.instruction.*
 import jp.mito.famiemukt.emurator.cpu.logic.*
@@ -11,6 +13,7 @@ class CPU(
     private val cpuRegisters: CPURegisters,
     private val cpuBus: CPUBus,
     private val dma: DMA,
+    private val stateObserver: StateObserver = NothingStateObserver(),
 ) {
     data class CPUResult(
         val addCycle: Int = 0,
@@ -36,6 +39,7 @@ class CPU(
      */
     fun executeMasterClockStep(): CPUResult? {
         if (++masterClockCount >= NTSC_CPU_CYCLES_PER_MASTER_CLOCKS) {
+            stateObserver.notifyM2Cycle(cycle = 1)
             val result = executeCPUClockStep()
             masterClockCount = 0
             return result
@@ -115,12 +119,10 @@ class CPU(
             val opcode = fetch(bus = cpuBus, registers = cpuRegisters)
             val instruction = Instructions[opcode.toInt()]
             executingCPUClockCount = 1
-            when (instruction.opCode) {
-                JAM -> println("${instruction.opCode} instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}")
+            when {
+                instruction.opCode === JAM -> println("${instruction.opCode} instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}")
+                instruction.isUnofficial -> println("Unofficial instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}")
                 else -> Unit
-            }
-            if (instruction.isUnofficial) {
-                println("Unofficial instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}")
             }
             this.fetchedInstruction = instruction
             return null
@@ -246,13 +248,23 @@ class CPU(
     ): InterruptType? {
         // https://www.nesdev.org/wiki/CPU_interrupts#Branch_instructions_and_interrupts
         when (instruction.opCode) {
-            // 分岐命令で、かつページまたぎをしていなければポーリングしない
+            /* Branch instructions and interrupts
+               The branch instructions have more subtle interrupt polling behavior.
+               Interrupts are always polled before the second CPU cycle (the operand fetch),
+               but not before the third CPU cycle on a taken branch.
+               Additionally, for taken branches that cross a page boundary,
+               interrupts are polled before the PCH fixup cycle (see [1] for a tick-by-tick breakdown of the branch instructions).
+               An interrupt being detected at either of these polling points (including only being detected at the first one)
+               will trigger a CPU interrupt. */
             BCS, BCC,
             BEQ, BNE,
             BMI, BPL,
             BVC, BVS -> {
-                if (beforeRegisterPC and 0xff00u == cpuRegisters.PC and 0xff00u) {
-                    return null
+                // TODO: 全体含めて修正？
+                @Suppress("ControlFlowWithEmptyBody")
+                if (beforeRegisterPC and 0xff00u != cpuRegisters.PC and 0xff00u) {
+                    // ページまたぎをした場合、PCの上位バイト修正サイクルの前にポーリング？
+                    // 実質このままのロジックでは無理
                 }
             }
             // 他の命令は次へ進む

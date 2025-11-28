@@ -13,7 +13,6 @@ import jp.mito.famiemukt.emurator.ppu.VideoRAM
 import jp.mito.famiemukt.emurator.util.VisibleForTesting
 
 class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, audioSamplingRate: Int) {
-    private val stateObserver = cartridge.mapper.stateObserver
     private val interrupter = object : Interrupter {
         override fun requestREST() = cpu.requestInterruptREST()
         override fun requestNMI() = cpu.requestInterruptNMI()
@@ -49,7 +48,10 @@ class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, 
 
     private val cpuBus = CPUBus(mapper = cartridge.mapper, dma = dma, ram = ram, apu = apu, ppu = ppu, pad = pad)
     private val cpuRegisters = CPURegisters()
-    private val cpu: CPU by lazy { CPU(cpuRegisters = cpuRegisters, cpuBus = cpuBus, dma = dma) }
+
+    private val cpu: CPU by lazy {
+        CPU(cpuRegisters = cpuRegisters, cpuBus = cpuBus, dma = dma, stateObserver = cartridge.mapper.stateObserver)
+    }
 
     val pixelsRGB32: IntArray by ppu::pixelsRGB32
 
@@ -68,15 +70,19 @@ class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, 
 
     private var isResetRequested: Boolean = false
 
+    fun powerOn() {
+        cpu.setPowerOnState()
+        apu.reset()
+        ppu.reset()
+    }
+
     fun reset() {
-        // TODO: 電源投入時とリセットを分ける？
         isResetRequested = true
     }
 
     private fun executeResetIfNeeded(): Boolean {
         if (isResetRequested.not()) return false
         isResetRequested = false
-        // TODO: 電源投入時とリセットを分ける？
         cpu.setPowerOnState()
         apu.reset()
         ppu.reset()
@@ -94,8 +100,6 @@ class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, 
         if (cpuResult != null) {
             // リセット要求を処理
             if (cpuResult.instruction != null && executeResetIfNeeded()) return false
-            // サイクル数を通知
-            stateObserver.notifyM2Cycle(cycle = cpuResult.executeCycle)
         }
         return drawFrame
     }
