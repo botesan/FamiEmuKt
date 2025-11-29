@@ -1,7 +1,7 @@
 package jp.mito.famiemukt.emurator.ppu
 
 @OptIn(ExperimentalUnsignedTypes::class)
-class Sprite(ppuBus: PPUBus, ppuControl: PPUControl, objectAttributeMemory: UByteArray, no: Int) {
+class FetchSprite(private val ppuBus: PPUBus, ppuControl: PPUControl, objectAttributeMemory: UByteArray, no: Int) {
     val index: Int = no * 4
     private val isSprite8x16: Boolean = ppuControl.isSprite8x16
 
@@ -48,34 +48,53 @@ class Sprite(ppuBus: PPUBus, ppuControl: PPUControl, objectAttributeMemory: UByt
     private val offsetX: Int = objectAttributeMemory[index + 3].toInt()
 
     // その他
-    private val spriteHeight: Int = if (ppuControl.isSprite8x16) 16 else 8
-    private val linePatterns: Array<LinePattern> by lazy {
-        (0..<spriteHeight)
-            .map { y ->
-                val address = spritePatternTableAddress +
-                        (tileNo + (y ushr 3)) * PPU.PATTERN_TABLE_ELEMENT_SIZE +
-                        (y and 0x07)
-                val l = ppuBus.readMemory(address = address)
-                val h = ppuBus.readMemory(address = (address + PPU.PATTERN_TABLE_ELEMENT_SIZE / 2))
-                LinePattern(l = l, h = h)
-            }
-            .toTypedArray()
+    val spriteHeight: Int = if (ppuControl.isSprite8x16) 16 else 8
+
+    private var fetchingRelativeY: Int = 0
+    private var fetchedPatternL: UByte = 0U
+    private var fetchedPatternH: UByte = 0U
+
+    fun fetchLinePatternL(y: Int) {
+        if (y == 261 + 1) return
+        val indexY = y - offsetY
+        //check(value = indexY in 0 until spriteHeight) { "y out of range. y=$y offsetY=$offsetY spriteHeight=$spriteHeight" }
+        if (indexY !in 0 until spriteHeight) {
+            // TODO: 引っかかりことあり？間違い？
+            println("fetchLinePatternL() y out of range. indexY=$indexY, y=$y offsetY=$offsetY spriteHeight=$spriteHeight")
+            return
+        }
+        val fetchingRelativeY = if (isFlipVertical) spriteHeight - 1 - indexY else indexY
+        val address = spritePatternTableAddress +
+                (tileNo + (fetchingRelativeY ushr 3)) * PPU.PATTERN_TABLE_ELEMENT_SIZE +
+                (fetchingRelativeY and 0x07)
+        fetchedPatternL = ppuBus.readMemory(address = address)
+        this.fetchingRelativeY = fetchingRelativeY
     }
 
-    fun getColorNo(x: Int, y: Int): Int? {
+    fun fetchLinePatternH(y: Int) {
+        if (y == 261 + 1) return
+        val indexY = y - offsetY
+        //check(value = indexY in 0 until spriteHeight) { "y out of range. y=$y offsetY=$offsetY spriteHeight=$spriteHeight" }
+        if (indexY !in 0 until spriteHeight) {
+            // TODO: 引っかかりことあり？間違い？
+            println("fetchLinePatternH() y out of range. indexY=$indexY, y=$y offsetY=$offsetY spriteHeight=$spriteHeight")
+            return
+        }
+        val fetchingRelativeY = if (isFlipVertical) spriteHeight - 1 - indexY else indexY
+        check(value = fetchingRelativeY == this.fetchingRelativeY) { "fetchLinePatternH must be called after fetchLinePatternL. fetchingRelativeY=$fetchingRelativeY this.fetchingRelativeY=${this.fetchingRelativeY}" }
+        val address = spritePatternTableAddress +
+                (tileNo + (fetchingRelativeY ushr 3)) * PPU.PATTERN_TABLE_ELEMENT_SIZE +
+                (fetchingRelativeY and 0x07) + PPU.PATTERN_TABLE_ELEMENT_SIZE / 2
+        fetchedPatternH = ppuBus.readMemory(address = address)
+    }
+
+    fun getColorNo(x: Int): Int? {
         val indexX = x - offsetX
         if (indexX !in 0..7) return null
-        val indexY = y - offsetY
-        if (indexY !in linePatterns.indices) return null
         val relativeX = if (isFlipHorizontal) 7 - indexX else indexX
-        val relativeY = if (isFlipVertical) spriteHeight - 1 - indexY else indexY
         val patternBitPos = 7 - relativeX
-        val patternL = linePatterns[relativeY].l
-        val patternH = linePatterns[relativeY].h
-        val colorNoL = if (patternL.toInt() and (1 shl patternBitPos) != 0) 1 else 0
-        val colorNoH = if (patternH.toInt() and (1 shl patternBitPos) != 0) 2 else 0
+        val colorNoL = if (fetchedPatternL.toInt() and (1 shl patternBitPos) != 0) 1 else 0
+        val colorNoH = if (fetchedPatternH.toInt() and (1 shl patternBitPos) != 0) 2 else 0
         return colorNoH or colorNoL
     }
-
-    data class LinePattern(val l: UByte, val h: UByte)
 }

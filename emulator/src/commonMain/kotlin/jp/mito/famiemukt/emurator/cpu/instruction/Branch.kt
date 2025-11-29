@@ -18,7 +18,7 @@ object BCC : OfficialOpCode(name = "BCC") {
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1
+            operand.addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -31,7 +31,7 @@ object BCS : OfficialOpCode(name = "BCS") {
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1
+            operand.addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -44,7 +44,7 @@ object BEQ : OfficialOpCode(name = "BEQ") {
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1
+            operand.addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -57,7 +57,7 @@ object BMI : OfficialOpCode(name = "BMI") {
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1
+            operand.addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -70,7 +70,7 @@ object BNE : OfficialOpCode(name = "BNE") {
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1
+            operand.addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -83,7 +83,7 @@ object BPL : OfficialOpCode(name = "BPL") {
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1
+            operand.addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -96,7 +96,7 @@ object BVC : OfficialOpCode(name = "BVC") {
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1
+            operand.addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -109,7 +109,7 @@ object BVS : OfficialOpCode(name = "BVS") {
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1
+            operand.addCycle + 1 or 0x0001_0000
         }
     }
 }

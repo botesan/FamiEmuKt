@@ -68,6 +68,7 @@ class NesTestRomsTest {
     @Test
     fun testCPUInterrupt_2() = checkRom("nes-test-roms/cpu_interrupts_v2/rom_singles/2-nmi_and_brk.nes")
 
+    // TODO: 画面を見るに成功していない（最後まで画面表示されない／途中で非公式コマンドが実行されている）
     @Test
     fun testCPUInterrupt_3() = checkRom("nes-test-roms/cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes")
 
@@ -88,6 +89,7 @@ class NesTestRomsTest {
     @Test
     fun testPPUVBLNMI_03() = checkRom("nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes")
 
+    // Failed #11 11) Immediate occurence should be after NEXT instruction
     @Test
     fun testPPUVBLNMI_04() = checkRom("nes-test-roms/ppu_vbl_nmi/rom_singles/04-nmi_control.nes")
 
@@ -268,7 +270,13 @@ class NesTestRomsTest {
                 false
             }
 
-            0x00.toUByte() -> true
+            0x00.toUByte() -> {
+                val message = data.drop(n = 4).takeWhile { it != 0.toUByte() }
+                    .toUByteArray().asByteArray().toString(Charsets.UTF_8)
+                println(message)
+                true
+            }
+
             else -> {
                 val code = data[0].toString(16).padStart(2, '0')
                 val message = data.drop(n = 4).takeWhile { it != 0.toUByte() }
@@ -331,6 +339,10 @@ class NesTestRomsTest {
             data[passFirst + 4] == 'E'.code.toUByte() &&
             data[passFirst + 5] == 'D'.code.toUByte()
         ) {
+            val message = data.asSequence().take(n = 0x400).windowed(size = 32, step = 32, partialWindows = true)
+                .map { String(it.toUByteArray().asByteArray(), Charsets.US_ASCII).trim { c -> c < ' ' }.trimEnd() }
+                .filter { it.isNotEmpty() }.joinToString(separator = "\n").trimEnd()
+            println(message)
             return true
         }
         if (failFirst in 0..<0x400 &&

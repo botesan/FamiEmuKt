@@ -11,11 +11,21 @@ data class Instruction(
     val opCode: OpCode,
     val addressing: Addressing,
     val cycle: Int,
+    val pollInterruptCycle: Int,
     val isUnofficial: Boolean,
 )
 
+private fun inst(opCode: OpCode, addressing: Addressing, cycle: Int, pollInterruptCycle: Int) =
+    Instruction(
+        opCode,
+        addressing,
+        cycle = cycle,
+        pollInterruptCycle = pollInterruptCycle,
+        isUnofficial = opCode is UnofficialOpCode,
+    )
+
 private fun inst(opCode: OpCode, addressing: Addressing, cycle: Int) =
-    Instruction(opCode, addressing, cycle, isUnofficial = opCode is UnofficialOpCode)
+    inst(opCode, addressing, cycle = cycle, pollInterruptCycle = cycle - 1)
 
 val Instructions: List<Instruction> = listOf(
     /* 0x00 */inst(BRK, Implied, 7),

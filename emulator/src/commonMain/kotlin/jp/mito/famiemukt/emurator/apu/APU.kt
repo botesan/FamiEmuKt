@@ -220,55 +220,53 @@ class APU(
     /** マスタークロックを１つ進める */
     fun executeMasterClockStep() {
         if (++masterClockCount >= NTSC_CPU_CYCLES_PER_MASTER_CLOCKS) {
-            execute(cpuCycle = 1)
+            executeCpuCycleStep()
             masterClockCount = 0
         }
     }
 
-    fun execute(cpuCycle: Int) {
-        for (i in 0..<cpuCycle) {
-            // APU cycle毎の処理
-            if (isEvenCPUCycle) {
-                pulse1.clockTimer()
-                pulse2.clockTimer()
-                noise.clockTimer()
-            }
-            // CPU cycle毎の処理
-            triangle.clockTimer()
-            dmc.clockTimer()
-            // フレームシーケンサーのカウント
-            val frameSequence = frameSequencers.getOrElse(frameSequencerIndex) { frameSequencers[0] }
-            if (frameSequence.first == ++frameSequencerCounter) {
-                frameSequence.second.forEach(::executeFrameCounter)
-                if (frameSequencerIndex < frameSequencers.lastIndex) {
-                    frameSequencerIndex++
-                } else {
-                    frameSequencerIndex = 0
-                    frameSequencerCounter = 0
-                }
-            }
-            // フレームカウンターのリセット
-            if (resetFrameSequencerCount == frameSequencerCounter) {
+    fun executeCpuCycleStep() {
+        // APU cycle毎の処理
+        if (isEvenCPUCycle) {
+            pulse1.clockTimer()
+            pulse2.clockTimer()
+            noise.clockTimer()
+        }
+        // CPU cycle毎の処理
+        triangle.clockTimer()
+        dmc.clockTimer()
+        // フレームシーケンサーのカウント
+        val frameSequence = frameSequencers.getOrElse(frameSequencerIndex) { frameSequencers[0] }
+        if (frameSequence.first == ++frameSequencerCounter) {
+            frameSequence.second.forEach(::executeFrameCounter)
+            if (frameSequencerIndex < frameSequencers.lastIndex) {
+                frameSequencerIndex++
+            } else {
                 frameSequencerIndex = 0
                 frameSequencerCounter = 0
-                resetFrameSequencerCount = -1
             }
-            // 出力値の決定 (1 APU クロックごと)
-            if (isEvenCPUCycle) {
-                audioMixer.syncChannelVolume()
-            }
-            // サンプリング値通知
-            val checkCycleCount = audioSamplingRate * cpuCycleCountForSampleNotify + cpuCycleRemainForSampleNotify
-            val checkCycleRemain = checkCycleCount - NTSC_CPU_CLOCKS_HZ
-            if (checkCycleRemain >= 0) {
-                audioSampleNotifier.notifySample(audioMixer.outputVolume)
-                cpuCycleRemainForSampleNotify = checkCycleRemain
-                cpuCycleCountForSampleNotify = 0
-            }
-            cpuCycleCountForSampleNotify++
-            // フラグ変更
-            isEvenCPUCycle = isEvenCPUCycle.not()
         }
+        // フレームカウンターのリセット
+        if (resetFrameSequencerCount == frameSequencerCounter) {
+            frameSequencerIndex = 0
+            frameSequencerCounter = 0
+            resetFrameSequencerCount = -1
+        }
+        // 出力値の決定 (1 APU クロックごと)
+        if (isEvenCPUCycle) {
+            audioMixer.syncChannelVolume()
+        }
+        // サンプリング値通知
+        val checkCycleCount = audioSamplingRate * cpuCycleCountForSampleNotify + cpuCycleRemainForSampleNotify
+        val checkCycleRemain = checkCycleCount - NTSC_CPU_CLOCKS_HZ
+        if (checkCycleRemain >= 0) {
+            audioSampleNotifier.notifySample(audioMixer.outputVolume)
+            cpuCycleRemainForSampleNotify = checkCycleRemain
+            cpuCycleCountForSampleNotify = 0
+        }
+        cpuCycleCountForSampleNotify++
+        // フラグ変更
+        isEvenCPUCycle = isEvenCPUCycle.not()
     }
 
     private fun executeFrameCounter(frameCounter: FrameCounter) {

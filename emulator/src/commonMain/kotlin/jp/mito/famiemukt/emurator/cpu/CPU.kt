@@ -4,8 +4,12 @@ import jp.mito.famiemukt.emurator.NTSC_CPU_CYCLES_PER_MASTER_CLOCKS
 import jp.mito.famiemukt.emurator.cartridge.NothingStateObserver
 import jp.mito.famiemukt.emurator.cartridge.StateObserver
 import jp.mito.famiemukt.emurator.cpu.addressing.fetch
-import jp.mito.famiemukt.emurator.cpu.instruction.*
-import jp.mito.famiemukt.emurator.cpu.logic.*
+import jp.mito.famiemukt.emurator.cpu.instruction.BRK
+import jp.mito.famiemukt.emurator.cpu.instruction.JAM
+import jp.mito.famiemukt.emurator.cpu.instruction.RTI
+import jp.mito.famiemukt.emurator.cpu.logic.INTERRUPT_ADDRESS_IRQ
+import jp.mito.famiemukt.emurator.cpu.logic.INTERRUPT_ADDRESS_NMI
+import jp.mito.famiemukt.emurator.cpu.logic.executeInterrupt
 import jp.mito.famiemukt.emurator.dma.DMA
 import jp.mito.famiemukt.emurator.util.toHex
 
@@ -17,6 +21,7 @@ class CPU(
 ) {
     data class CPUResult(
         val addCycle: Int = 0,
+        val branched: Boolean = false,
         val instruction: Instruction? = null,
         val interrupt: InterruptType? = null,
     ) {
@@ -26,7 +31,6 @@ class CPU(
 
     /** 電源投入時 */
     fun setPowerOnState() {
-        // TODO: 電源投入時とリセットを分ける？
         executeInterrupt(type = InterruptType.RESET, cpuBus, cpuRegisters)
     }
 
@@ -39,7 +43,7 @@ class CPU(
      */
     fun executeMasterClockStep(): CPUResult? {
         if (++masterClockCount >= NTSC_CPU_CYCLES_PER_MASTER_CLOCKS) {
-            stateObserver.notifyM2Cycle(cycle = 1)
+            stateObserver.notifyM2OneCycle()
             val result = executeCPUClockStep()
             masterClockCount = 0
             return result
@@ -68,9 +72,6 @@ class CPU(
     /** 乗っ取り割り込み */
     private var hijackInterrupt: InterruptType? = null
 
-    /** DMA実行サイクル */
-    private var dmaExecuteCycle: Int = 0
-
     /**
      * CPUクロックを１つ進める
      * @return 実行完了した命令
@@ -79,82 +80,129 @@ class CPU(
         // カウント
         totalCPUClockCount++
         executingCPUClockCount++
-        // TODO: DMAの処理待ち／これで良い？
-        if (dmaExecuteCycle > 0) {
-            dmaExecuteCycle--
+        // DMAの処理待ち
+        if (dma.executeCPUCycleStepIfNeed(cpuBus = cpuBus, currentCycles = totalCPUClockCount)) {
             executingCPUClockCount--
             return CPUResult(addCycle = 1)
         }
         // 割り込みがポーリングしていれば割り込みを実行（次の命令を実行する前に実行）
         // https://www.nesdev.org/wiki/CPU_interrupts
+        val fetchedInstruction = fetchedInstruction
         val polledInterrupt = polledInterrupt
-        if (polledInterrupt != null) {
+        if (fetchedInstruction == null && polledInterrupt != null) {
             val executingInterrupt = executingInterrupt
             if (executingInterrupt != null) {
-                // 割り込みの乗っ取り処理（IRQ <= NMI）IRQ実行後
-                hijackInterruptIfNeeded(interrupt = executingInterrupt)
+                // 割り込みの乗っ取り処理（IRQ <= NMI）IRQ実行前
+                hijackInterruptIRQPrepare(interrupt = executingInterrupt)
                 // 割り込み処理の実行完了待ち
                 if (executingCPUClockCount < executingInterrupt.executeCycle) return null
-                // 実行完了
-                clearInterruptRequest(type = executingInterrupt)
-                hijackInterrupt?.also {
-                    clearInterruptRequest(type = it)
-                    hijackInterrupt = null
-                }
+                // 割り込み実行
+                executeInterrupt(type = executingInterrupt, cpuBus, cpuRegisters)
+//println("executingInterrupt=$executingInterrupt") // TODO: デバッグ用
+                // 割り込みの乗っ取り処理（IRQ <= NMI）IRQ実行後
+                hijackInterruptIRQIfNeeded(interrupt = executingInterrupt)
                 executingCPUClockCount = 0
                 this.polledInterrupt = null
                 this.executingInterrupt = null
                 return CPUResult(interrupt = executingInterrupt)
             } else {
-                // 割り込み実行
-                executeInterrupt(type = polledInterrupt, cpuBus, cpuRegisters)
+                // 割り込み実行対象設定
                 executingCPUClockCount = 1
                 this.executingInterrupt = polledInterrupt
+//println("this.executingInterrupt=${this.executingInterrupt}, polledInterrupt=$polledInterrupt") // TODO: デバッグ用
                 return null
             }
         }
         // フェッチ
-        val fetchedInstruction = fetchedInstruction
         if (fetchedInstruction == null) {
             val opcode = fetch(bus = cpuBus, registers = cpuRegisters)
             val instruction = Instructions[opcode.toInt()]
-            executingCPUClockCount = 1
+            // executingCPUClockCount = 1 // すでに 1 になっているはず
             when {
                 instruction.opCode === JAM -> println("${instruction.opCode} instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}")
                 instruction.isUnofficial -> println("Unofficial instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}")
                 else -> Unit
             }
             this.fetchedInstruction = instruction
+            // 割り込みのポーリング
+            this.polledInterrupt = pollingInterrupt()
+            //
             return null
         }
         // 割り込みの乗っ取り処理（BRK <= NMI,IRQ）BRK実行前
-        hijackInterruptIfNeeded(instruction = fetchedInstruction)
+        hijackInterruptBRKPrepare(instruction = fetchedInstruction)
+        // 割り込みのポーリング
+        if (executingCPUClockCount < fetchedInstruction.pollInterruptCycle) this.polledInterrupt = pollingInterrupt()
         // 実行待ち
         if (executingCPUClockCount < fetchedInstruction.cycle) return null
         // 実行 or 実行中取得
         val executingInstruction = executingInstruction ?: run {
-            // I/PCレジスター保持
-            val beforeRegisterI = cpuRegisters.P.I
-            val beforeRegisterPC = cpuRegisters.PC
+//if (this.polledInterrupt != null) println("this.polledInterrupt=${this.polledInterrupt}, executingInstruction=$executingInstruction") // TODO: デバッグ用
             // 実行
-            val addCycle = fetchedInstruction.opCode.execute(fetchedInstruction, cpuBus, cpuRegisters)
-            val executingInstruction = CPUResult(addCycle = addCycle, instruction = fetchedInstruction)
-            this.executingInstruction = executingInstruction
-            // 割り込みのポーリング（実際は２サイクル前？）
-            // https://www.nesdev.org/wiki/CPU_interrupts
-            this.polledInterrupt = pollingInterrupt(
-                beforeRegisterI = beforeRegisterI,
-                beforeRegisterPC = beforeRegisterPC,
+            val result = fetchedInstruction.opCode.execute(fetchedInstruction, cpuBus, cpuRegisters)
+            val addCycle = result and 0x0000_FFFF
+            val branched = (result and 0x0001_0000) != 0
+            val executingInstruction = CPUResult(
+                addCycle = addCycle,
+                branched = branched,
                 instruction = fetchedInstruction,
             )
+            this.executingInstruction = executingInstruction
+//if (isRequestedNMI) println("this.executingInstruction=${this.executingInstruction}") // TODO: デバッグ用
+            if (fetchedInstruction.opCode === RTI) {
+                // 割り込みのポーリング
+                this.polledInterrupt = pollingInterrupt()
+            }
+//// TODO: デバッグ用
+//if (this.polledInterrupt != null) println("this.polledInterrupt=${this.polledInterrupt}, totalCPUClockCount=$totalCPUClockCount, executingInstruction=$executingInstruction")
             // 割り込みの乗っ取り処理
-            hijackInterrupt?.also {
-                hijackInterruptIfNeeded(interrupt = it, instruction = fetchedInstruction)
-                clearInterruptRequest(type = it)
-                hijackInterrupt = null
+            val hijackInterrupt = hijackInterrupt
+            if (hijackInterrupt != null) {
+//// TODO: デバッグ用
+//if (this.polledInterrupt != null) println("hijackInterrupt=${hijackInterrupt}, totalCPUClockCount=$totalCPUClockCount, executingInstruction=$executingInstruction")
+                hijackInterruptBRKIfNeeded(interrupt = hijackInterrupt, instruction = fetchedInstruction)
+                // 乗っ取ったらポーリング無効
+                this.polledInterrupt = null
             }
             // 実行結果返す
             executingInstruction
+        }
+        // 分岐命令のページまたぎ時の割り込みのポーリング
+        /* https://www.nesdev.org/wiki/CPU_interrupts#Branch_instructions_and_interrupts
+           Branch instructions and interrupts
+           The branch instructions have more subtle interrupt polling behavior.
+           Interrupts are always polled before the second CPU cycle (the operand fetch),
+           but not before the third CPU cycle on a taken branch.
+           Additionally, for taken branches that cross a page boundary, interrupts are polled before the PCH fixup cycle
+           (see [1] for a tick-by-tick breakdown of the branch instructions).
+           An interrupt being detected at either of these polling points (including only being detected at the first one)
+           will trigger a CPU interrupt. */
+        /* [1] https://www.nesdev.org/6502_cpu.txt
+            Relative addressing (BCC, BCS, BNE, BEQ, BPL, BMI, BVC, BVS)
+            #   address  R/W description
+            --- --------- --- ---------------------------------------------
+            1     PC      R  fetch opcode, increment PC
+            2     PC      R  fetch operand, increment PC
+            3     PC      R  Fetch opcode of next instruction,
+                             If branch is taken, add operand to PCL.
+                             Otherwise increment PC.
+            4+    PC*     R  Fetch opcode of next instruction.
+                             Fix PCH. If it did not change, increment PC.
+            5!    PC      R  Fetch opcode of next instruction,
+                             increment PC.
+            Notes: The opcode fetch of the next instruction is included to
+                  this diagram for illustration purposes. When determining
+                  real execution times, remember to subtract the last
+                  cycle.
+                  * The high byte of Program Counter (PCH) may be invalid
+                    at this time, i.e. it may be smaller or bigger by $100.
+                  + If branch is taken, this cycle will be executed.
+                  ! If branch occurs to different page, this cycle will be
+                    executed. */
+        if (executingInstruction.branched && executingInstruction.addCycle > 1) {
+            if (executingCPUClockCount == executingInstruction.executeCycle - 1) {
+                this.polledInterrupt = pollingInterrupt()
+            }
         }
         // 実行終了待ち
         if (executingCPUClockCount < executingInstruction.executeCycle) return null
@@ -162,60 +210,79 @@ class CPU(
         executingCPUClockCount = 0
         this.fetchedInstruction = null
         this.executingInstruction = null
-        // TODO: APUの追加CPU cyclesも含めて取得していいのか確認
-        dmaExecuteCycle = dma.getAndClearLastDMACycles(currentCycles = totalCPUClockCount)
         return executingInstruction
     }
 
-    private fun hijackInterruptIfNeeded(interrupt: InterruptType? = null, instruction: Instruction? = null) {
-        // BRK用の実行処理
-        if (interrupt != null && instruction != null && instruction.opCode === BRK) {
-            // BRK実行後状態、割り込みの乗っ取り処理（BRK <= NMI,IRQ）
-            if (interrupt === InterruptType.NMI) {
-                // println("BRK <= NMI 2")
-                // 呼び出しアドレスをNMIに変更
-                cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
-                // スタックのBフラグ解除
-                val s = ProcessorStatus(value = pop(cpuBus, cpuRegisters)).apply { B = false }.value
-                push(value = s, cpuBus, cpuRegisters)
-
-            } else if (interrupt === InterruptType.IRQ) {
-                //println("BRK <= IRQ 2")
-                // BRK実行後状態、呼び出しアドレスをIRQに変更（実質変更無し）
-                cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_IRQ)
-                // スタックのBフラグ解除
-                val s = ProcessorStatus(value = pop(cpuBus, cpuRegisters)).apply { B = false }.value
-                push(value = s, cpuBus, cpuRegisters)
-            }
-            return
-        }
+    private fun hijackInterruptBRKPrepare(instruction: Instruction) {
         // 検出処理
         when {
-            hijackInterrupt != null -> Unit
             // 1サイクルから4サイクルに上位の割り込みがあった場合、乗っ取られる
             // https://www.nesdev.org/wiki/CPU_interrupts#Interrupt_hijacking
             executingCPUClockCount !in 1..4 -> Unit
-            // 割り込みの乗っ取り処理（IRQ <= NMI）
-            interrupt === InterruptType.IRQ && isRequestedNMI -> {
-                //println("IRQ <= NMI")
-                // IRQ実行後状態、呼び出しアドレスをNMIに変更
-                cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
-                // 乗っ取り割り込み保持
-                hijackInterrupt = InterruptType.NMI
-            }
             // 割り込みの乗っ取り処理（BRK <= NMI,IRQ）
-            instruction != null && instruction.opCode === BRK -> {
+            instruction.opCode === BRK -> {
                 if (isRequestedNMI) {
-                    //println("BRK <= NMI 1")
+                    println("BRK <= NMI 1 $totalCPUClockCount")
                     // BRK実行前状態、乗っ取り割り込み保持
                     hijackInterrupt = InterruptType.NMI
                 } else if (isRequestedIRQ) {
-                    //println("BRK <= IRQ 1")
+                    println("BRK <= IRQ 1 $totalCPUClockCount")
                     // BRK実行前状態、乗っ取り割り込み保持
                     hijackInterrupt = InterruptType.IRQ
                 }
             }
         }
+    }
+
+    private fun hijackInterruptBRKIfNeeded(interrupt: InterruptType, instruction: Instruction) {
+        // BRK用の実行処理
+        val hijackInterrupt = hijackInterrupt
+        if (instruction.opCode === BRK) {
+            // BRK実行後状態、割り込みの乗っ取り処理（BRK <= NMI,IRQ）
+            if (interrupt === InterruptType.NMI) {
+                println("BRK <= NMI 2 $totalCPUClockCount")
+                // 呼び出しアドレスをNMIに変更
+                cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
+            } else if (interrupt === InterruptType.IRQ) {
+                println("BRK <= IRQ 2 $totalCPUClockCount")
+                // BRK実行後状態、呼び出しアドレスをIRQに変更（実質変更無し）
+                cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_IRQ)
+            }
+        }
+        if (hijackInterrupt != null) clearInterruptRequest(type = hijackInterrupt)
+        clearInterruptRequest(type = interrupt)
+        this.hijackInterrupt = null
+    }
+
+    private fun hijackInterruptIRQPrepare(interrupt: InterruptType) {
+        // 検出処理
+        when {
+            // 1サイクルから4サイクルに上位の割り込みがあった場合、乗っ取られる
+            // https://www.nesdev.org/wiki/CPU_interrupts#Interrupt_hijacking
+            executingCPUClockCount !in 1..4 -> Unit
+            // 割り込みの乗っ取り処理（IRQ <= NMI）
+            interrupt === InterruptType.IRQ && isRequestedNMI -> {
+                println("IRQ <= NMI 1 $totalCPUClockCount")
+                // IQR実行前状態、乗っ取り割り込み保持
+                hijackInterrupt = InterruptType.NMI
+            }
+        }
+    }
+
+    private fun hijackInterruptIRQIfNeeded(interrupt: InterruptType) {
+        // IRQ用の実行処理
+        val hijackInterrupt = hijackInterrupt
+        when {
+            // 割り込みの乗っ取り処理（IRQ <= NMI）
+            interrupt === InterruptType.IRQ && hijackInterrupt === InterruptType.NMI -> {
+                println("IRQ <= NMI 2 $totalCPUClockCount")
+                // IRQ実行後状態、呼び出しアドレスをNMIに変更
+                cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
+            }
+        }
+        if (hijackInterrupt != null) clearInterruptRequest(type = hijackInterrupt)
+        clearInterruptRequest(type = interrupt)
+        this.hijackInterrupt = null
     }
 
     private var isRequestedRESET: Boolean = false
@@ -227,64 +294,60 @@ class CPU(
         isRequestedRESET = true
     }
 
-    fun requestInterruptNMI() {
-        isRequestedNMI = true
-        //println("requestInterruptNMI")
+    fun requestInterruptNMI(levelLow: Boolean) {
+        isRequestedNMI = levelLow
+//println("requestInterruptNMI: levelLow=$levelLow, masterClockCount=$masterClockCount, totalCPUClockCount=$totalCPUClockCount, PC=${cpuRegisters.PC.toHex()}, executingCPUClockCount=$executingCPUClockCount, fetchedInstruction=${this.fetchedInstruction}, executingInstruction=${this.executingInstruction}, polledInterrupt=${this.polledInterrupt}") // TODO: デバッグ用
+        if (levelLow.not()) return
+        val fetchedInstruction = fetchedInstruction
+        val executingInterrupt = executingInterrupt
+        if (fetchedInstruction == null && executingInterrupt != null) {
+//println("requestInterruptNMI: executingInterrupt=${executingInterrupt}") // TODO: デバッグ用
+            // 割り込みの乗っ取り処理（IRQ <= NMI）IRQ実行前
+            hijackInterruptIRQPrepare(interrupt = executingInterrupt)
+        } else if (polledInterrupt == null && fetchedInstruction != null && executingCPUClockCount <= fetchedInstruction.pollInterruptCycle) {
+            // 必要ならポーリングする
+            if (masterClockCount == 0) {
+                polledInterrupt = pollingInterrupt()
+//println("requestInterruptNMI: polledInterrupt=${this.polledInterrupt}") // TODO: デバッグ用
+            }
+        }
     }
 
     fun requestInterruptOnIRQ() {
         isRequestedIRQ = true
-        //println("requestInterruptOnIRQ")
+//if (cpuRegisters.P.I.not()) println("requestInterruptOnIRQ: masterClockCount=$masterClockCount, totalCPUClockCount=$totalCPUClockCount, PC=${cpuRegisters.PC.toHex()}, I=${cpuRegisters.P.I}, executingCPUClockCount=$executingCPUClockCount, fetchedInstruction=${this.fetchedInstruction}, executingInstruction=${this.executingInstruction}, polledInterrupt=${this.polledInterrupt}") // TODO: デバッグ用
+        // 必要ならポーリングする
+        val fetchedInstruction = fetchedInstruction
+        if (polledInterrupt == null && fetchedInstruction != null && executingCPUClockCount < fetchedInstruction.pollInterruptCycle) {
+            if (masterClockCount == 0) {
+                polledInterrupt = pollingInterrupt()
+//println("requestInterruptOnIRQ: polledInterrupt=${this.polledInterrupt}") // TODO: デバッグ用
+            }
+        }
     }
 
     fun requestInterruptOffIRQ() {
         isRequestedIRQ = false
     }
 
-    private fun pollingInterrupt(
-        beforeRegisterI: Boolean,
-        beforeRegisterPC: UShort,
-        instruction: Instruction
-    ): InterruptType? {
-        // https://www.nesdev.org/wiki/CPU_interrupts#Branch_instructions_and_interrupts
-        when (instruction.opCode) {
-            /* Branch instructions and interrupts
-               The branch instructions have more subtle interrupt polling behavior.
-               Interrupts are always polled before the second CPU cycle (the operand fetch),
-               but not before the third CPU cycle on a taken branch.
-               Additionally, for taken branches that cross a page boundary,
-               interrupts are polled before the PCH fixup cycle (see [1] for a tick-by-tick breakdown of the branch instructions).
-               An interrupt being detected at either of these polling points (including only being detected at the first one)
-               will trigger a CPU interrupt. */
-            BCS, BCC,
-            BEQ, BNE,
-            BMI, BPL,
-            BVC, BVS -> {
-                // TODO: 全体含めて修正？
-                @Suppress("ControlFlowWithEmptyBody")
-                if (beforeRegisterPC and 0xff00u != cpuRegisters.PC and 0xff00u) {
-                    // ページまたぎをした場合、PCの上位バイト修正サイクルの前にポーリング？
-                    // 実質このままのロジックでは無理
-                }
-            }
-            // 他の命令は次へ進む
-            else -> Unit
-        }
+    private fun pollingInterrupt(): InterruptType? {
         // Iフラグに関係しない割り込み
         // https://www.nesdev.org/wiki/Status_flags#I:_Interrupt_Disable
         // When set, IRQ interrupts are inhibited. NMI, BRK, and reset are not affected.
         when {
             isRequestedRESET -> return InterruptType.RESET
-            isRequestedNMI -> return InterruptType.NMI
+            isRequestedNMI -> {
+//println("pollingInterrupt()=InterruptType.NM: masterClockCount=$masterClockCount, totalCPUClockCount=$totalCPUClockCount, PC=${cpuRegisters.PC.toHex()}") // TODO: デバッグ用
+                return InterruptType.NMI
+            }
+
             isRequestedIRQ -> Unit
             else -> return null
         }
         // IRQの割り込み無視チェック
-        return when (instruction.opCode) {
-            // 実行前のIフラグで判断
-            CLI, SEI, PLP -> if (beforeRegisterI) null else InterruptType.IRQ
-            // Iフラグで判断
-            else -> if (cpuRegisters.P.I) null else InterruptType.IRQ
+        return if (cpuRegisters.P.I) null else {
+//println("pollingInterrupt()=InterruptType.IRQ: masterClockCount=$masterClockCount, totalCPUClockCount=$totalCPUClockCount, PC=${cpuRegisters.PC.toHex()}") // TODO: デバッグ用
+            InterruptType.IRQ
         }
     }
 

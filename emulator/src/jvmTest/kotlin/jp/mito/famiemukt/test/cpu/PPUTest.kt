@@ -425,6 +425,7 @@ class PPUTest {
         val ppuRegisters = PPURegisters()
         val interrupter = mockk<Interrupter>()
         every { interrupter.requestNMI() } returns Unit
+        every { interrupter.requestNMI(levelLow = false) } returns Unit
         val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
@@ -435,29 +436,29 @@ class PPUTest {
         // NMIコントロール設定
         ppu.writePPUControl(value = 0x80u)
         // NMI割り込み直前まで実行してチェック
-        ppu.execute(ppuCycle = 341 * (240 + 1) + 1)
+        repeat(times = 341 * (240 + 1) + 1) { ppu._executePPUCycleStep() }
         verify(exactly = 0) { interrupter.requestNMI() }
         assertFalse(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // NMI割り込みまで実行してチェック
-        ppu.execute(ppuCycle = 1)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
         verify(exactly = 1) { interrupter.requestNMI() }
         assertTrue(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // VBlankクリア直前まで実行してチェック
-        ppu.execute(ppuCycle = 341 * 20 - 1)
+        repeat(times = 341 * 20 - 1) { ppu._executePPUCycleStep() }
         verify(exactly = 1) { interrupter.requestNMI() }
         assertTrue(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // VBlankクリアまで実行してチェック
-        ppu.execute(ppuCycle = 1)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
         verify(exactly = 1) { interrupter.requestNMI() }
         assertFalse(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // NMIコントロールクリア
         ppu.writePPUControl(value = 0x00u)
         // NMI割り込み直前まで実行してチェック
-        ppu.execute(ppuCycle = 341 - 2 + 341 * (240 + 1) + 1)
+        repeat(times = 341 - 2 + 341 * (240 + 1) + 1) { ppu._executePPUCycleStep() }
         verify(exactly = 1) { interrupter.requestNMI() }
         assertFalse(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // NMI割り込み（フラグのみ）まで実行してチェック
-        ppu.execute(ppuCycle = 1)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
         verify(exactly = 1) { interrupter.requestNMI() }
         assertTrue(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // NMIコントロール設定してNMI割り込み実行チェック
@@ -499,29 +500,29 @@ class PPUTest {
         // 偶数フレーム／スプライト表示無し／便宜上最初のフレームが偶数とする
         ppu.writePPUControl(value = 0x80u)
         ppu.writePPUMask(value = 0x00u)
-        ppu.execute(ppuCycle = 341 * (240 + 1) + 1)
+        repeat(times = 341 * (240 + 1) + 1) { ppu._executePPUCycleStep() }
         assertFalse(actual = ppu._isOddFrame)
         verify(exactly = 0) { interrupter.requestNMI() }
-        ppu.execute(ppuCycle = 1)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
         verify(exactly = 1) { interrupter.requestNMI() }
         // 奇数フレーム／スプライト表示無し
-        ppu.execute(ppuCycle = 341 * 262 - 1)
+        repeat(times = 341 * 262 - 1) { ppu._executePPUCycleStep() }
         assertTrue(actual = ppu._isOddFrame)
         verify(exactly = 1) { interrupter.requestNMI() }
-        ppu.execute(ppuCycle = 1)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
         verify(exactly = 2) { interrupter.requestNMI() }
         // 偶数フレーム／スプライト表示あり／BG表示はmockkで時間が掛かってしまうためやめる
         ppu.writePPUMask(value = 0x10u)
-        ppu.execute(ppuCycle = 341 * 262 - 1)
+        repeat(times = 341 * 262 - 2) { ppu._executePPUCycleStep() }
         assertFalse(actual = ppu._isOddFrame)
         verify(exactly = 2) { interrupter.requestNMI() }
-        ppu.execute(ppuCycle = 1)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
         verify(exactly = 3) { interrupter.requestNMI() }
         // 奇数フレーム／スプライト表示あり（１サイクル分少なくなる）
-        ppu.execute(ppuCycle = 341 * 262 - 2)
+        repeat(times = 341 * 262 - 1) { ppu._executePPUCycleStep() }
         assertTrue(actual = ppu._isOddFrame)
         verify(exactly = 3) { interrupter.requestNMI() }
-        ppu.execute(ppuCycle = 1)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
         verify(exactly = 4) { interrupter.requestNMI() }
     }
 }

@@ -34,10 +34,10 @@ class Mapper016(
     override var mirroring: Mirroring = defaultMirroring(information)
         private set
     override val stateObserver: StateObserver = object : StateObserverAdapter() {
-        override fun notifyM2Cycle(cycle: Int) {
+        override fun notifyM2OneCycle() {
             if (isIRQCounterEnabled) {
                 if (irqCounter > 0) {
-                    irqCounter = (irqCounter - cycle).coerceAtLeast(minimumValue = 0)
+                    irqCounter--
                     if (irqCounter == 0) {
                         interrupter.requestOnIRQ() // TODO: 合ってる？
                     }

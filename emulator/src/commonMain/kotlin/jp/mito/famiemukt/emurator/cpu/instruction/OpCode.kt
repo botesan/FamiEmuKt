@@ -6,6 +6,10 @@ import jp.mito.famiemukt.emurator.cpu.Instruction
 
 sealed interface OpCode {
     val name: String
+
+    /**
+     * @return 下位16bit:追加サイクル数、上位16bit:0!=分岐命令が成功したかどうか
+     */
     fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int
 }
 

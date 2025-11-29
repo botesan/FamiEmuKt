@@ -15,7 +15,7 @@ import jp.mito.famiemukt.emurator.util.VisibleForTesting
 class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, audioSamplingRate: Int) {
     private val interrupter = object : Interrupter {
         override fun requestREST() = cpu.requestInterruptREST()
-        override fun requestNMI() = cpu.requestInterruptNMI()
+        override fun requestNMI(levelLow: Boolean) = cpu.requestInterruptNMI(levelLow)
         override fun requestOnIRQ() = cpu.requestInterruptOnIRQ()
         override fun requestOffIRQ() = cpu.requestInterruptOffIRQ()
         override val isRequestedIRQ: Boolean get() = cpu.isRequestedIRQ
@@ -36,7 +36,7 @@ class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, 
     )
 
     private val ram = RAM()
-    private val dma = DMA(ram = ram, ppu = ppu)
+    private val dma = DMA(ppu = ppu, ppuRegisters = ppuRegisters)
     private val apu = APU(
         interrupter = interrupter,
         dma = dma,

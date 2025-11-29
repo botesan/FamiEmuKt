@@ -47,9 +47,9 @@ class Mapper019(
     private var isEnableIRQ: Boolean = false
     private var irqCounter: Int = 0
     override val stateObserver: StateObserver = object : StateObserverAdapter() {
-        override fun notifyM2Cycle(cycle: Int) {
+        override fun notifyM2OneCycle() {
             if (irqCounter >= 0x7FFF) return
-            irqCounter += cycle
+            irqCounter++
             if (irqCounter >= 0x7FFF) {
                 if (isEnableIRQ) interrupter.requestOnIRQ()
                 irqCounter = 0x7FFF

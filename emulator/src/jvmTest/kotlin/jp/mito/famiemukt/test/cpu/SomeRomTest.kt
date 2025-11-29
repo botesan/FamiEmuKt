@@ -38,16 +38,16 @@ class SomeRomTest {
             stateObserver = stateObserver,
             interrupter = object : Interrupter {
                 override fun requestREST() = cpu?.requestInterruptREST() ?: Unit
-                override fun requestNMI() = cpu?.requestInterruptNMI() ?: Unit
+                override fun requestNMI(levelLow: Boolean) = cpu?.requestInterruptNMI(levelLow) ?: Unit
                 override fun requestOnIRQ() = cpu?.requestInterruptOnIRQ() ?: Unit
                 override fun requestOffIRQ() = cpu?.requestInterruptOffIRQ() ?: Unit
                 override val isRequestedIRQ: Boolean get() = cpu?.isRequestedIRQ ?: false
             })
-        val dma = DMA(ram = ram, ppu = ppu)
+        val dma = DMA(ppu = ppu, ppuRegisters = ppuRegisters)
         val apu = APU(
             interrupter = object : Interrupter {
                 override fun requestREST() = cpu?.requestInterruptREST() ?: Unit
-                override fun requestNMI() = cpu?.requestInterruptNMI() ?: Unit
+                override fun requestNMI(levelLow: Boolean) = cpu?.requestInterruptNMI(levelLow) ?: Unit
                 override fun requestOnIRQ() = cpu?.requestInterruptOnIRQ() ?: Unit
                 override fun requestOffIRQ() = cpu?.requestInterruptOffIRQ() ?: Unit
                 override val isRequestedIRQ: Boolean get() = cpu?.isRequestedIRQ ?: false
@@ -107,34 +107,38 @@ class SomeRomTest {
             val ppuX: Int,
         )
 
-        val exceptedSequence = assertNotNull(actual = javaClass.classLoader.getResource("nes-test-roms/other/nestest.log"))
-            .readText()
-            .lineSequence()
-            .filter { it.isNotEmpty() }
-            .mapIndexed { index, line ->
-                @Suppress("ReplaceSubstringWithTake")
-                Excepted(
-                    lineNo = index + 1, line = line,
-                    commandName = line.substring(startIndex = 16, endIndex = 19),
-                    cpuRegisters = CPURegisters(
-                        A = line.substring(startIndex = 50, endIndex = 52).toUByte(radix = 16),
-                        X = line.substring(startIndex = 55, endIndex = 57).toUByte(radix = 16),
-                        Y = line.substring(startIndex = 60, endIndex = 62).toUByte(radix = 16),
-                        PC = line.substring(startIndex = 0, endIndex = 4).toUShort(radix = 16),
-                        S = line.substring(startIndex = 71, endIndex = 73).toUByte(radix = 16),
-                        P = ProcessorStatus(value = line.substring(startIndex = 65, endIndex = 67).toUByte(radix = 16)),
-                    ),
-                    cpuCycles = line.substring(startIndex = 90).toInt(),
-                    ppuY = line.substring(startIndex = 78, endIndex = 81).trim().toInt(),
-                    ppuX = line.substring(startIndex = 82, endIndex = 85).trim().toInt(),
-                )
-            }
+        val exceptedSequence =
+            assertNotNull(actual = javaClass.classLoader.getResource("nes-test-roms/other/nestest.log"))
+                .readText()
+                .lineSequence()
+                .filter { it.isNotEmpty() }
+                .mapIndexed { index, line ->
+                    @Suppress("ReplaceSubstringWithTake")
+                    Excepted(
+                        lineNo = index + 1, line = line,
+                        commandName = line.substring(startIndex = 16, endIndex = 19),
+                        cpuRegisters = CPURegisters(
+                            A = line.substring(startIndex = 50, endIndex = 52).toUByte(radix = 16),
+                            X = line.substring(startIndex = 55, endIndex = 57).toUByte(radix = 16),
+                            Y = line.substring(startIndex = 60, endIndex = 62).toUByte(radix = 16),
+                            PC = line.substring(startIndex = 0, endIndex = 4).toUShort(radix = 16),
+                            S = line.substring(startIndex = 71, endIndex = 73).toUByte(radix = 16),
+                            P = ProcessorStatus(
+                                value = line.substring(startIndex = 65, endIndex = 67).toUByte(radix = 16)
+                            ),
+                        ),
+                        cpuCycles = line.substring(startIndex = 90).toInt(),
+                        ppuY = line.substring(startIndex = 78, endIndex = 81).trim().toInt(),
+                        ppuX = line.substring(startIndex = 82, endIndex = 85).trim().toInt(),
+                    )
+                }
         var cpu: CPU? = null
         val ram = RAM()
         val cpuRegisters = CPURegisters()
         val ppuRegisters = PPURegisters()
         val backupRAM = BackupRAM()
-        val iNesData = assertNotNull(actual = javaClass.classLoader.getResource("nes-test-roms/other/nestest.nes")).readBytes()
+        val iNesData =
+            assertNotNull(actual = javaClass.classLoader.getResource("nes-test-roms/other/nestest.nes")).readBytes()
         val cartridge = Cartridge(backupRAM = backupRAM, iNesData = iNesData)
         val stateObserver = cartridge.mapper.stateObserver
         val videoRAM = VideoRAM()
@@ -145,16 +149,16 @@ class SomeRomTest {
             stateObserver = stateObserver,
             interrupter = object : Interrupter {
                 override fun requestREST() = cpu?.requestInterruptREST() ?: Unit
-                override fun requestNMI() = cpu?.requestInterruptNMI() ?: Unit
+                override fun requestNMI(levelLow: Boolean) = cpu?.requestInterruptNMI(levelLow) ?: Unit
                 override fun requestOnIRQ() = cpu?.requestInterruptOnIRQ() ?: Unit
                 override fun requestOffIRQ() = cpu?.requestInterruptOffIRQ() ?: Unit
                 override val isRequestedIRQ: Boolean get() = cpu?.isRequestedIRQ ?: false
             })
-        val dma = DMA(ram = ram, ppu = ppu)
+        val dma = DMA(ppu = ppu, ppuRegisters = ppuRegisters)
         val apu = APU(
             interrupter = object : Interrupter {
                 override fun requestREST() = cpu?.requestInterruptREST() ?: Unit
-                override fun requestNMI() = cpu?.requestInterruptNMI() ?: Unit
+                override fun requestNMI(levelLow: Boolean) = cpu?.requestInterruptNMI(levelLow) ?: Unit
                 override fun requestOnIRQ() = cpu?.requestInterruptOnIRQ() ?: Unit
                 override fun requestOffIRQ() = cpu?.requestInterruptOffIRQ() ?: Unit
                 override val isRequestedIRQ: Boolean get() = cpu?.isRequestedIRQ ?: false

@@ -52,9 +52,9 @@ class Mapper067(
             will reset the toggle so that the next write to $C800 will be the first write.
             The IRQ counter, when enabled, counts down every CPU cycle.
             When it wraps ($0000→FFFF), it disables itself and triggers an IRQ. */
-        override fun notifyM2Cycle(cycle: Int) {
+        override fun notifyM2OneCycle() {
             if (isEnableIRQCounter) {
-                irqCounter -= cycle
+                irqCounter--
                 if (irqCounter < 0) {
                     irqCounter += 0x1_00_00
                     isEnableIRQCounter = false

@@ -4,6 +4,7 @@ import jp.mito.famiemukt.emurator.NTSC_PPU_CYCLES_PER_MASTER_CLOCKS
 import jp.mito.famiemukt.emurator.cartridge.StateObserver
 import jp.mito.famiemukt.emurator.cpu.Interrupter
 import jp.mito.famiemukt.emurator.util.VisibleForTesting
+import kotlin.properties.Delegates
 
 /*
 https://www.nesdev.org/wiki/CPU_memory_map
@@ -34,8 +35,7 @@ class PPU(
     private val interrupter: Interrupter,
     private val stateObserver: StateObserver,
 ) {
-    val pixelsRGB32: IntArray =
-        IntArray(size = NTSC_PPU_VISIBLE_LINE_X_COUNT * NTSC_PPU_VISIBLE_FRAME_LINE_COUNT)
+    val pixelsRGB32: IntArray = IntArray(size = NTSC_PPU_VISIBLE_LINE_X_COUNT * NTSC_PPU_VISIBLE_FRAME_LINE_COUNT)
 
     private val objectAttributeMemory: UByteArray = UByteArray(size = 256)
 
@@ -54,6 +54,12 @@ class PPU(
     @VisibleForTesting
     val _isOddFrame: Boolean get() = isOddFrame
     private var isOddFrame: Boolean = false
+
+    /** VBLANKが設定されたときのフラグ */
+    private var isWrittenVerticalBlankFlag: Boolean = false
+
+    /** VBLANKがクリアされたときのフラグ */
+    private var isClearedVerticalBlankHasStartedFlag: Boolean = false
 
     // 可能な範囲でリセット状態を設定
     // https://www.nesdev.org/wiki/PPU_power_up_state
@@ -100,6 +106,7 @@ class PPU(
     }
 
     fun writePPUControl(value: UByte) {
+//println("writePPUControl(${value.toHex()}) masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY")// TODO: デバッグ
         // NMIがONになったときステータスでVBLANKだったらすぐにNMI割り込みする？
         // https://www.nesdev.org/wiki/PPU_registers#Vblank_NMI
         // Changing NMI enable from 0 to 1 while the vblank flag in PPUSTATUS is 1 will immediately trigger an NMI.
@@ -110,12 +117,21 @@ class PPU(
         val before = ppuRegisters.ppuControl.isVerticalBlankingInterval
         ppuRegisters.ppuControl.value = value
         val after = ppuRegisters.ppuControl.isVerticalBlankingInterval
-        if (before.not() && after && ppuRegisters.ppuStatus.isVerticalBlankHasStarted) {
-            interrupter.requestNMI()
+        // TODO: レジスターの変更を通知するようにしたい
+        if (ppuRegisters.ppuStatus.isVerticalBlankHasStarted) {
+            if (before.not() && after) {
+                isWrittenVerticalBlankFlag = true
+//println("interrupter.requestNMI() from write ppu control. masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY")// TODO: デバッグ
+                interrupter.requestNMI()
+            } else if (before && after.not() && ppuX in 2..3 && ppuY == NTSC_PPU_POST_RENDER_LINE + 1) {
+//println("interrupter.requestNMI(levelLow = false) from write ppu control. masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY")// TODO: デバッグ
+                interrupter.requestNMI(levelLow = false)
+            }
         }
     }
 
     fun writePPUMask(value: UByte) {
+//println("writePPUMask(${value.toHex()}) masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY, isOddFrame=$isOddFrame")// TODO: デバッグ
         ppuRegisters.ppuMask.value = value
     }
 
@@ -123,6 +139,17 @@ class PPU(
         val result = ppuRegisters.ppuStatus.value
         ppuRegisters.ppuStatus.isVerticalBlankHasStarted = false
         ppuRegisters.internal.w = false
+        isClearedVerticalBlankHasStartedFlag = true
+        // https://www.nesdev.org/wiki/PPU_frame_timing#VBL_Flag_Timing
+        if (ppuRegisters.ppuControl.isVerticalBlankingInterval) {
+//println("readPPUStatus()=>${result.toHex()} masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY")// TODO: デバッグ
+            // リクエスト済みNMIをクリア（無理やり？）
+            if (ppuX in 1..3 && ppuY == NTSC_PPU_POST_RENDER_LINE + 1) {
+                interrupter.requestNMI(levelLow = false)
+            }
+        }
+//// TODO: PPU の 10-even_odd_timing #3 テストが通らない／右下最後のピクセル付近で BG 描画切り替えのテスト？
+//if (result != 0.toUByte() || ppuY in 240..241) println("readPPUStatus()=>${result.toHex()} masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY, isOddFrame=$isOddFrame")// TODO: デバッグ
         return result
     }
 
@@ -137,32 +164,6 @@ class PPU(
     fun writeObjectAttributeMemory(value: UByte) {
         objectAttributeMemory[ppuRegisters.oamAddress.toInt()] = value
         ppuRegisters.oamAddress = (ppuRegisters.oamAddress + 1U).toUByte()
-    }
-
-    fun dmaCopyObjectAttributeMemory(copyTo: (UByteArray) -> Unit) {
-        /*
-          OAM DMA ($4014) > write
-          Common name: OAMDMA
-          Description: OAM DMA register (high byte)
-          Access: write
-          This port is located on the CPU. Writing $XX will upload 256 bytes of data from CPU page $XX00–$XXFF to the internal PPU OAM.
-          This page is typically located in internal RAM, commonly $0200–$02FF, but cartridge RAM or ROM can be used as well.
-
-          The CPU is suspended during the transfer, which will take 513 or 514 cycles after the $4014 write tick.
-          (1 wait state cycle while waiting for writes to complete, +1 if on a put cycle, then 256 alternating get/put cycles.
-          See DMA for more information.)
-          The OAM DMA is the only effective method for initializing all 256 bytes of OAM.
-          Because of the decay of OAM's dynamic RAM when rendering is disabled,
-          the initialization should take place within vblank. Writes through OAMDATA are generally too slow for this task.
-          The DMA transfer will begin at the current OAM write address.
-          It is common practice to initialize it to 0 with a write to OAMADDR before the DMA transfer.
-          Different starting addresses can be used for a simple OAM cycling technique, to alleviate sprite priority conflicts by flickering.
-          If using this technique, after the DMA OAMADDR should be set to 0 before the end of vblank to prevent potential OAM corruption (see errata).
-          However, due to OAMADDR writes also having a "corruption" effect,[4] this technique is not recommended.
-        */
-        // とりあえず0以外は実行できないようにする
-        check(value = ppuRegisters.oamAddress == 0.toUByte())
-        copyTo(objectAttributeMemory)
     }
 
     fun writePPUScroll(value: UByte) {
@@ -216,93 +217,355 @@ class PPU(
      */
     fun executeMasterClockStep(): Boolean {
         if (++masterClockCount >= NTSC_PPU_CYCLES_PER_MASTER_CLOCKS) {
-            val drawFrame = execute(ppuCycle = 1)
+            val drawFrame = executePPUCycleStep()
             masterClockCount = 0
             return drawFrame
         }
         return false
     }
 
-    /**
-     * @param ppuCycle 進めるPPUクロック
-     */
-    fun execute(ppuCycle: Int): Boolean {
-        var isFinishFrame = false
-        var remainCycle = ppuCycle
-        while (remainCycle > 0) {
-            // 位置保持
-            val x = ppuX
-            val y = ppuY
-            val pixelIndex = (NTSC_PPU_VISIBLE_LINE_X_COUNT) * y + x
-            // バックグラウンド描画
-            val isTranslucentBackground = buildBackground(x = x, y = y, pixelIndex = pixelIndex)
-            // スプライトの描画とフェッチ（次のライン）
-            buildSprite(x = x, y = y, pixelIndex = pixelIndex, isTranslucentBackground = isTranslucentBackground)
-            // A12の通知
-            notifyRisingA12IfNeeded(x = x, y = y)
-            // 各種フラグ＆割り込み処理
-            applyFlagsAndInterrupt(x = x, y = y)
-            // インクリメント（デクリメント）
-            //// 奇数フレームの対応 https://www.nesdev.org/wiki/PPU_frame_timing#Even/Odd_Frames
-            if ((ppuRegisters.ppuMask.isShowBackground || ppuRegisters.ppuMask.isShowSprite) &&
-                isOddFrame && x == NTSC_PPU_VISIBLE_LINE_FIRST_X && y == NTSC_PPU_VISIBLE_FRAME_FIRST_LINE
-            ) {
-                // BGかスプライトが表示中の場合、奇数フレームの先頭は１サイクルスキップする
-                // TODO: 実装は最後のサイクルをスキップするみたい
-                //  https://www.nesdev.org/w/images/default/4/4f/Ppu.svg の右下
-            } else {
-                remainCycle--
+    // TODO: 各プロパティの整理
+    private var attributeS: UShort = 0u
+    private var patternNoS: UShort = 0u
+    private var patternHS: UShort = 0u
+    private var patternLS: UShort = 0u
+    private var attributeF: UByte = 0u
+    private var patternNoF: UByte = 0u
+    private var patternHF: UByte = 0u
+    private var patternLF: UByte = 0u
+    private val fetchingSprites: MutableList<FetchSprite> = mutableListOf()
+    private var drawingSprites: List<FetchSprite> = emptyList()
+    private var a12: Int by Delegates.observable(initialValue = 0x0000) { _, old, new ->
+        if (old == 0x0000 && new == 0x1000) {
+            /* Regarding PPU A12:
+               When using 8x8 sprites,
+                if the BG uses $0000, and the sprites use $1000, the IRQ counter should decrement on PPU cycle 260,
+                right after the visible part of the target scanline has ended.
+               When using 8x8 sprites,
+                if the BG uses $1000, and the sprites use $0000, the IRQ counter should decrement on PPU cycle 324
+                of the previous scanline (as in, right before the target scanline is about to be drawn).
+                However, the 2C02's pre-render scanline will decrement the counter twice every other vertical redraw,
+                so the IRQ will shake one scanline.
+                This is visible in Wario's Woods:
+                 with some PPU-CPU reset alignments the bottom line of the green grass of the play area may flicker black
+                 on the rightmost ~48 pixels, due to an extra count firing the IRQ one line earlier than expected.
+               When using 8x16 sprites PPU A12 must be explicitly tracked.
+                The exact time and number of times the counter is clocked will depend on the specific set of sprites
+                present on every scanline.
+                Specific combinations of sprites could cause the counter to decrement up to four times,
+                or the IRQ to be delayed or early by some multiple of 8 pixels.
+                If there are fewer than 8 sprites on a scanline, the PPU fetches tile $FF ($1FF0-$1FFF)
+                for each leftover sprite and discards its value.
+                Thus if a game uses 8x16 sprites with its background and sprites from PPU $0000,
+                then the MMC3 ends up counting each scanline that doesn't use all eight sprites. */
+            // A12が立ち上がるのはパターンテーブルアクセスのアドレスの12ビット目(A12:マスク0x1000)が0から1になるとき
+            // アドレスは各スプライトの設定を使用する
+            // 上記説明文にスキャンライン毎に詳細を追わないとダメと書いてある
+            // FCEUXは、基本は全スキャンラインで１回呼んでいるっぽい
+            // https://github.com/TASEmulators/fceux/blob/f980ec2bc7dc962f6cd76b9ae3131f2eb902c9e7/src/ppu.cpp#L1378
+            // https://www.nesdev.org/wiki/MMC3#IRQ_Specifics
+            // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+            stateObserver.notifyRisingA12PPU()
+        }
+    }
+
+    @Suppress("FunctionName")
+    @VisibleForTesting
+    fun _executePPUCycleStep(): Boolean = executePPUCycleStep()
+
+    private fun executePPUCycleStep(): Boolean {
+        // 主にBGのフェッチ
+        fun fetchBackground(ppuX: Int) {
+            if (ppuRegisters.ppuMask.isShowBackground.not() && ppuRegisters.ppuMask.isShowSprite.not()) return
+            when (ppuX) {
+                in 1..256, in 321..336 -> {
+                    when (ppuX % 8) {
+                        // NTフェッチ
+                        2 -> {
+                            patternNoF = ppuBus.readMemory(address = ppuRegisters.ppuScroll.tileAddress)
+                        }
+                        // ATフェッチ
+                        4 -> {
+                            attributeF = ppuBus.readMemory(address = ppuRegisters.ppuScroll.attributeAddress)
+                            // a12チェック
+                            a12 = ppuRegisters.ppuControl.backgroundPatternTableAddress and 0x1000
+                        }
+                        // BG lowフェッチ
+                        6 -> {
+                            val patternAddress = ppuRegisters.ppuControl.backgroundPatternTableAddress +
+                                    patternNoF.toInt() * PATTERN_TABLE_ELEMENT_SIZE +
+                                    ppuRegisters.ppuScroll.fineY.toInt()
+                            patternLF = ppuBus.readMemory(address = patternAddress)
+                        }
+                        // BG highフェッチ
+                        0 -> {
+                            val patternAddress = ppuRegisters.ppuControl.backgroundPatternTableAddress +
+                                    patternNoF.toInt() * PATTERN_TABLE_ELEMENT_SIZE +
+                                    ppuRegisters.ppuScroll.fineY.toInt() + PATTERN_TABLE_ELEMENT_SIZE / 2
+                            patternHF = ppuBus.readMemory(address = patternAddress)
+                            // https://www.nesdev.org/wiki/PPU_rendering
+                            // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+                            // At dot 256 of each scanline
+                            //  If rendering is enabled, the PPU increments the vertical position in v.
+                            //  The effective Y scroll coordinate is incremented, which is a complex operation that
+                            //  will correctly skip the attribute table memory regions, and wrap to the next nametable appropriately.
+                            if (ppuX == 256) ppuRegisters.internal.incrementY()
+                            // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+                            // https://www.nesdev.org/wiki/PPU_rendering
+                            // Between dot 328 of a scanline, and 256 of the next scanline
+                            //  If rendering is enabled, the PPU increments the horizontal position in v many times across the scanline,
+                            //  it begins at dots 328 and 336, and will continue through the next scanline at 8, 16, 24... 240, 248, 256
+                            //  (every 8 dots across the scanline until 256).
+                            //  Across the scanline the effective coarse X scroll coordinate is incremented repeatedly,
+                            //  which will also wrap to the next nametable appropriately.
+                            ppuRegisters.internal.incrementCoarseX()
+                            // 下記のように記述されてはいるが
+                            // The shifters are reloaded during ticks 9, 17, 25, ..., 257.
+                            patternNoS = ((patternNoS.toInt() shl 8) or patternNoF.toInt()).toUShort()
+                            attributeS = ((attributeS.toInt() shl 8) or attributeF.toInt()).toUShort()
+                            patternLS = ((patternLS.toInt() shl 8) or patternLF.toInt()).toUShort()
+                            patternHS = ((patternHS.toInt() shl 8) or patternHF.toInt()).toUShort()
+                        }
+                    }
+                }
+                // https://www.nesdev.org/wiki/PPU_rendering
+                // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+                // At dot 257 of each scanline
+                257 -> {
+                    ppuRegisters.internal.updateVForDot257OfEachScanline()
+                }
             }
-            val ppuX = ++ppuX
+        }
+
+        // スプライトの評価
+        fun evaluateSprites(ppuX: Int, ppuY: Int) {
+            if (ppuRegisters.ppuMask.isShowBackground.not() && ppuRegisters.ppuMask.isShowSprite.not()) return
+            // https://www.nesdev.org/wiki/PPU_OAM
+            // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+            // https://www.nesdev.org/wiki/PPU_sprite_evaluation
+            when (ppuX) {
+                in 1..64 -> {
+                    // Secondary OAMクリア
+                    // 違う？
+                    if (ppuX == 1) {
+                        fetchingSprites.clear()
+                    }
+                }
+
+                in 65..256 -> {
+                    val i = ppuX - 64
+                    if (i % 3 == 0 && fetchingSprites.size <= 8) {
+                        val no = (i / 3) - 1
+                        val sprite = FetchSprite(ppuBus, ppuRegisters.ppuControl, objectAttributeMemory, no)
+                        if (ppuY < 239 && ppuY + 1 - sprite.offsetY in 0..<sprite.spriteHeight) {
+                            fetchingSprites += sprite
+                            // 実機はバグがあるため実際の動作とは違うが、一応スプライトオーバーフローを設定
+                            if (fetchingSprites.size > 8) {
+                                ppuRegisters.ppuStatus.isSpriteOverflow = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // スプライトのフェッチ
+        fun fetchSprites(ppuX: Int, ppuY: Int) {
+            if (ppuRegisters.ppuMask.isShowBackground.not() && ppuRegisters.ppuMask.isShowSprite.not()) return
+            when (ppuX) {
+                in 257..320 -> {
+                    // https://www.nesdev.org/wiki/PPU_registers#Values_during_rendering
+                    // OAMADDR is set to 0 during each of ticks 257–320 (the sprite tile loading interval) of the pre-render and visible scanlines.
+                    // This also means that at the end of a normal complete rendered frame, OAMADDR will always have returned to 0.
+                    ppuRegisters.oamAddress = 0u
+                    // スプライトフェッチ
+                    // https://www.nesdev.org/wiki/PPU_OAM
+                    // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+                    // https://www.nesdev.org/wiki/PPU_sprite_evaluation
+                    when (ppuX % 8) {
+                        // a12チェック
+                        4 -> {
+                            val index = (ppuX - 260) / 8
+                            val sprite = fetchingSprites.getOrNull(index)
+                            a12 = if (ppuRegisters.ppuControl.isSprite8x16.not()) {
+                                ppuRegisters.ppuControl.spritePatternTableAddress and 0x1000
+                            } else if (index < 8 && sprite != null) {
+                                sprite.spritePatternTableAddress and 0x1000
+                            } else {
+                                0x1000
+                            }
+                        }
+                        // low
+                        6 -> {
+                            val index = (ppuX - 262) / 8
+                            val sprite = fetchingSprites.getOrNull(index)
+                            sprite?.fetchLinePatternL(y = ppuY + 1)
+                        }
+                        // high
+                        0 -> {
+                            val index = (ppuX - 264) / 8
+                            val sprite = fetchingSprites.getOrNull(index)
+                            sprite?.fetchLinePatternH(y = ppuY + 1)
+                        }
+                    }
+                    // TODO: これで良い？
+                    if (ppuX == 320) {
+                        drawingSprites = fetchingSprites.take(n = 8)
+                    }
+                }
+            }
+        }
+
+        // Visible frame
+        fun executeLine0to239IfNeeded(ppuX: Int, ppuY: Int) {
+            if (ppuY in NTSC_PPU_VISIBLE_FRAME_FIRST_LINE..NTSC_PPU_VISIBLE_FRAME_LAST_LINE) {
+                fetchBackground(ppuX = ppuX)
+                evaluateSprites(ppuX = ppuX, ppuY = ppuY)
+                fetchSprites(ppuX = ppuX, ppuY = ppuY)
+            }
+        }
+
+        // VBLANKラインの一つ前
+        fun executeLine240IfNeeded(ppuY: Int) {
+            if (ppuY == NTSC_PPU_POST_RENDER_LINE) {
+                // 下記リンクの準備／フラグのクリア処理
+                // https://www.nesdev.org/wiki/PPU_frame_timing#VBL_Flag_Timing
+                isClearedVerticalBlankHasStartedFlag = false
+            }
+        }
+
+        // VBLANKライン
+        fun executeLine241IfNeeded(ppuX: Int, ppuY: Int) {
+            if (ppuY == NTSC_PPU_POST_RENDER_LINE + 1) {
+                if (ppuX == 1) {
+                    // VBLANK開始 1PPU サイクル前（1ドット目）でPPUSTATUSでクリアしていた場合NMI割り込みしない
+                    // https://www.nesdev.org/wiki/PPU_frame_timing#VBL_Flag_Timing
+                    if (isClearedVerticalBlankHasStartedFlag.not()) {
+                        // Line 241 の１ドット目（２番目のドット）にきてたら VBLANK フラグを立てて NMI 割り込みする
+                        // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+                        ppuRegisters.ppuStatus.isVerticalBlankHasStarted = true
+                    }
+//println("isVerticalBlankHasStarted=${ppuRegisters.ppuStatus.isVerticalBlankHasStarted}, masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY, isOddFrame=$isOddFrame")// TODO: デバッグ
+                    // TODO: レジスターの変更を通知するようにしたい
+                    // NMI割り込み要求
+                    if (ppuRegisters.ppuStatus.isVerticalBlankHasStarted && ppuRegisters.ppuControl.isVerticalBlankingInterval) {
+                        // https://www.nesdev.org/wiki/NMI
+                        //  Two 1-bit registers inside the PPU control the generation of NMI signals.
+                        //  Frame timing and accesses to the PPU's PPUCTRL and PPUSTATUS registers change these registers as follows,
+                        //  regardless of whether rendering is enabled:
+                        //  1.Start of vertical blanking: Set NMI_occurred in PPU to true.
+                        //  2.End of vertical blanking, sometime in pre-render scanline: Set NMI_occurred to false.
+                        //  3.Read PPUSTATUS: Return old status of NMI_occurred in bit 7, then set NMI_occurred to false.
+                        //  4.Write to PPUCTRL: Set NMI_output to bit 7.
+                        //  The PPU pulls /NMI low if and only if both NMI_occurred and NMI_output are true.
+                        //  By toggling NMI_output (PPUCTRL.7) during vertical blank without reading PPUSTATUS,
+                        //  a program can cause /NMI to be pulled low multiple times, causing multiple NMIs to be generated.
+//println("interrupter.requestNMI() from ppu cycle. masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY")// TODO: デバッグ
+                        interrupter.requestNMI()
+                    }
+                } else {
+                    // その他のサイクルでは isClearedVerticalBlankHasStartedFlag をクリア
+                    isClearedVerticalBlankHasStartedFlag = false
+                }
+            }
+        }
+
+        // Pre-render line
+        fun executeLine261IfNeeded(ppuX: Int, ppuY: Int) {
+            if (ppuY == NTSC_PPU_PRE_RENDER_LINE) {
+                fetchBackground(ppuX = ppuX)
+                fetchSprites(ppuX = ppuX, ppuY = ppuY)
+                when (ppuX) {
+                    // クリア VBLANK, Sprite0Hit, SpriteOverflow
+                    1 -> {
+                        // line 261の先頭１ドット目（２番目のドット）で各フラグのクリア
+                        // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+                        ppuRegisters.ppuStatus.isVerticalBlankHasStarted = false
+                        ppuRegisters.ppuStatus.isSprite0Hit = false
+                        ppuRegisters.ppuStatus.isSpriteOverflow = false
+                        if (isWrittenVerticalBlankFlag && ppuRegisters.ppuControl.isVerticalBlankingInterval) {
+                            // NMI割り込み要求クリア
+//println("interrupter.requestNMI(levelLow=false) from ppu cycle. masterClockCount=$masterClockCount, ppuX=$ppuX, ppuY=$ppuY")// TODO: デバッグ
+                            interrupter.requestNMI(levelLow = false)
+                        }
+                    }
+                    // vの上位３ビットをtにコピー
+                    in 280..304 -> {
+                        if (ppuRegisters.ppuMask.isShowBackground || ppuRegisters.ppuMask.isShowSprite) {
+                            // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
+                            // During dots 280 to 304 of the pre-render scanline (end of vblank)
+                            ppuRegisters.internal.updateVForDot280To304OfPreRenderScanline()
+                        }
+                    }
+                }
+            }
+        }
+
+        // インクリメント（フレーム終了判定付き）
+        fun executeIncrement(): Boolean {
+            // インクリメント
+            ppuX++
             if (ppuX > NTSC_PPU_LINE_LAST_X) {
-                this.ppuX = NTSC_PPU_VISIBLE_LINE_FIRST_X
-                val ppuY = ++ppuY
+                ppuX = NTSC_PPU_VISIBLE_LINE_FIRST_X
+                ppuY++
                 if (ppuY == NTSC_PPU_POST_RENDER_LINE) {
                     // フレーム終了
-                    // TODO: ==NTSC_PPU_POST_RENDER_LINE or >NTSC_PPU_PRE_RENDER_LINE どちらが良い？
-                    isFinishFrame = true
+                    return true
                 } else if (ppuY > NTSC_PPU_PRE_RENDER_LINE) {
-                    this.ppuY = NTSC_PPU_VISIBLE_FRAME_FIRST_LINE
+                    ppuY = NTSC_PPU_VISIBLE_FRAME_FIRST_LINE
                     // 奇数／偶数フレーム反転
                     isOddFrame = isOddFrame.not()
                 }
             }
+            // 偶数／奇数フレームの対応 https://www.nesdev.org/wiki/PPU_frame_timing#Even/Odd_Frames
+            // Even/Odd Frames
+            // - The PPU has an even/odd flag that is toggled every frame, regardless of whether rendering is enabled or disabled.
+            // - With rendering disabled (background and sprites disabled in PPUMASK ($2001)),
+            //   each PPU frame is 341*262=89342 PPU clocks long. There is no skipped clock every other frame.
+            // - With rendering enabled, each odd PPU frame is one PPU clock shorter than normal.
+            //   This is done by skipping the first idle tick on the first visible scanline
+            //   (by jumping directly from (339,261) on the pre-render scanline to (0,0) on the first visible scanline
+            //   and doing the last cycle of the last dummy nametable fetch there instead; see this diagram).
+            // - By keeping rendering disabled until after the time when the clock is skipped on odd frames,
+            //   you can get a different color dot crawl pattern than normal (it looks more like that of interlace,
+            //   where colors flicker between two states rather than the normal three).
+            //   Presumably Battletoads (and others) encounter this, since it keeps the BG disabled until well after this time each frame.
+            if ((ppuRegisters.ppuMask.isShowBackground || ppuRegisters.ppuMask.isShowSprite) &&
+                isOddFrame.not() && ppuX == NTSC_PPU_VISIBLE_LINE_FIRST_X && ppuY == NTSC_PPU_VISIBLE_FRAME_FIRST_LINE
+            ) {
+                // BGかスプライトが表示中の場合、偶数フレームの先頭は１サイクルスキップする
+                // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg の右下
+                // This dot is skipped by jumping directly from (339, 261) to (0, 0) on odd frames.
+                // Because of the 1-dot delay, this behaves like skipping (0, 0) on even frames.
+                ppuX++
+            }
+            // フレーム未終了
+            return false
         }
-        return isFinishFrame
-    }
 
-    private fun buildBackground(x: Int, y: Int, pixelIndex: Int): Boolean {
-        var isTranslucentBackgroundPixel = true
-        if (ppuRegisters.ppuMask.isShowBackground.not()) {
-            if (y <= NTSC_PPU_VISIBLE_FRAME_LAST_LINE && x <= NTSC_PPU_VISIBLE_LINE_LAST_X) {
-                // TODO: パレット0で良い？
+        // BG描画（透明描画を返す）
+        fun drawBG(pixelIndex: Int, ppuX: Int): Boolean {
+            var isTranslucentBackgroundPixel = true
+            if (ppuRegisters.ppuMask.isShowBackground.not()) {
+                // パレット0
                 pixelsRGB32[pixelIndex] = /* 0 */convertPaletteToRGB32(
                     palette = ppuBus.readMemory(address = 0x3F00),
                     ppuMask = ppuRegisters.ppuMask,
                 )
-            }
-        } else {
-            // 位置計算１
-            val relativeX = (ppuRegisters.ppuScroll.fineX.toInt() + x) and 0x07
-            // 範囲チェック
-            if (y <= NTSC_PPU_VISIBLE_FRAME_LAST_LINE && x <= NTSC_PPU_VISIBLE_LINE_LAST_X) {
-                // 位置計算２
-                val coarseX = ppuRegisters.ppuScroll.coarseX
+            } else {
+                val relativeX = ppuRegisters.ppuScroll.fineX.toInt() + (ppuX and 0x07)
+                val patternBitPos = 15 - relativeX
+                val shiftOffset = if (patternBitPos >= 8) 8 else 0
+                val coarseX = ppuRegisters.ppuScroll.coarseX - if (patternBitPos >= 8) 2u else 1u
                 val coarseY = ppuRegisters.ppuScroll.coarseY
-                val relativeY = ppuRegisters.ppuScroll.fineY.toInt()
-                // 属性取得
-                val attribute = ppuBus.readMemory(address = ppuRegisters.ppuScroll.attributeAddress)
-                // パターン取得
-                val patternNo = ppuBus.readMemory(address = ppuRegisters.ppuScroll.tileAddress).toInt()
-                val colorNo = getColorNo(
-                    patternTableAddress = ppuRegisters.ppuControl.backgroundPatternTableAddress,
-                    tileNo = patternNo,
-                    relativeX = relativeX,
-                    relativeY = relativeY,
-                )
-                // パレット取得
+                // スクロールの位置を考慮するためcoarseXYを使用して属性の位置（0-3）を決定x2
                 val paletteIndexX2 = ((coarseY.toInt() and 0b10) shl 1) or ((coarseX.toInt()) and 0b10)
-                val paletteH = ((attribute.toInt() shr paletteIndexX2) and 0b11) shl 2
+                val paletteH = ((attributeS.toInt() shr (paletteIndexX2 + shiftOffset)) and 0b11) shl 2
+                // パターンから色番号取得
+                val colorNoL = (patternLS.toInt() shr patternBitPos) and 0x01
+                val colorNoH = ((patternHS.toInt() shl 1) shr patternBitPos) and 0x02
+                val colorNo = colorNoH or colorNoL
+                // パレット取得
                 val palette = getPalette(isSprite = false, paletteH = paletteH, colorNo = colorNo)
                 // ２タイル分、先行フェッチしている前提でのドット反映？
                 if (colorNo != 0) {
@@ -310,66 +573,30 @@ class PPU(
                         palette = palette,
                         ppuMask = ppuRegisters.ppuMask,
                     )
+                    // 透明ではない
                     isTranslucentBackgroundPixel = false
                 } else {
+                    // パレット0
                     pixelsRGB32[pixelIndex] = convertPaletteToRGB32(
                         palette = ppuBus.readMemory(address = 0x3F00),
                         ppuMask = ppuRegisters.ppuMask,
                     )
                 }
             }
-            // 内部レジスタvの更新
-            // これ以降のvの更新はVBlank中は行わない？
-            // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
-            if (y !in NTSC_PPU_POST_RENDER_LINE..<NTSC_PPU_PRE_RENDER_LINE) {
-                // At dot 256 of each scanline
-                //  If rendering is enabled, the PPU increments the vertical position in v.
-                //  The effective Y scroll coordinate is incremented, which is a complex operation that
-                //  will correctly skip the attribute table memory regions, and wrap to the next nametable appropriately.
-                if (x == NTSC_PPU_VISIBLE_LINE_LAST_X + 1) {
-                    ppuRegisters.ppuScroll.internal.incrementY()
-                }
-                // At dot 257 of each scanline
-                if (x == NTSC_PPU_VISIBLE_LINE_LAST_X + 2) {
-                    ppuRegisters.ppuScroll.internal.updateVForDot257OfEachScanline()
-                }
-                // During dots 280 to 304 of the pre-render scanline (end of vblank)
-                if (y == NTSC_PPU_PRE_RENDER_LINE && x in 280..304) {
-                    ppuRegisters.ppuScroll.internal.updateVForDot280To304OfPreRenderScanline()
-                }
-                // Between dot 328 of a scanline, and 256 of the next scanline
-                //  If rendering is enabled, the PPU increments the horizontal position in v many times across the scanline,
-                //  it begins at dots 328 and 336, and will continue through the next scanline at 8, 16, 24... 240, 248, 256
-                //  (every 8 dots across the scanline until 256).
-                //  Across the scanline the effective coarse X scroll coordinate is incremented repeatedly,
-                //  which will also wrap to the next nametable appropriately.
-                // TODO: 下記の修正できるなら行う？
-                // ハードウェア的な動作としては２タイル分を先行フェッチするためにレジスターの値が先行してしまう？
-                // そのための調整をここで行ってみる（先行フェッチしている前提とすれば、relativeXで判断するのはOKだと思われる）
-                //  https://www.nesdev.org/wiki/PPU_rendering
-                if (x <= NTSC_PPU_VISIBLE_LINE_LAST_X + 1) {
-                    if (/*x*/relativeX and 0x07 == 0x07) { // relativeX判定用
-                        ppuRegisters.ppuScroll.internal.incrementCoarseX()
-                    }
-                }
-            }
+            return isTranslucentBackgroundPixel
         }
-        return isTranslucentBackgroundPixel
-    }
 
-    private fun buildSprite(x: Int, y: Int, pixelIndex: Int, isTranslucentBackground: Boolean) {
-        // スプライトの描画とフェッチ（次のライン）（正しくはないかもしれないが…)
-        // https://www.nesdev.org/wiki/PPU_OAM
-        // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
-        // https://www.nesdev.org/wiki/PPU_sprite_evaluation
-        if (ppuRegisters.ppuMask.isShowSprite) {
-            if (y <= NTSC_PPU_VISIBLE_FRAME_LAST_LINE) {
-                if (x <= NTSC_PPU_VISIBLE_LINE_LAST_X) {
-                    val lineSprites = lineSprites
+        // ドット描画
+        fun drawLine(ppuX: Int, ppuY: Int) {
+            val pixelIndex = NTSC_PPU_VISIBLE_LINE_X_COUNT * ppuY + ppuX
+            if (ppuY <= NTSC_PPU_VISIBLE_FRAME_LAST_LINE && ppuX <= NTSC_PPU_VISIBLE_LINE_LAST_X) {
+                val isTranslucentBackgroundPixel = drawBG(pixelIndex = pixelIndex, ppuX = ppuX)
+                // スプライト描画
+                if (ppuRegisters.ppuMask.isShowSprite) {
                     // 該当する中で最初のものを描画
-                    for (indexLineSprite in lineSprites.indices) {
-                        val sprite = lineSprites[indexLineSprite]
-                        val colorNo = sprite.getColorNo(x = x, y = y) ?: continue
+                    for (indexLineSprite in drawingSprites.indices) {
+                        val sprite = drawingSprites[indexLineSprite]
+                        val colorNo = sprite.getColorNo(x = ppuX) ?: continue
                         if (colorNo == 0) continue
                         // 以降、描画処理など
                         val palette = getPalette(isSprite = true, paletteH = sprite.paletteH, colorNo = colorNo)
@@ -378,42 +605,42 @@ class PPU(
                                 palette = palette,
                                 ppuMask = ppuRegisters.ppuMask,
                             )
-                        } else if (isTranslucentBackground) {
+                        } else if (isTranslucentBackgroundPixel) {
                             pixelsRGB32[pixelIndex] = convertPaletteToRGB32(
                                 palette = palette,
                                 ppuMask = ppuRegisters.ppuMask,
                             )
                         }
                         /* スプライト0チェック
-Sprite 0 hits
-Sprites are conventionally numbered 0 to 63. Sprite 0 is the sprite controlled by OAM addresses $00-$03,
-sprite 1 is controlled by $04-$07, ..., and sprite 63 is controlled by $FC-$FF.
-While the PPU is drawing the picture, when an opaque pixel of sprite 0 overlaps an opaque pixel of the background, this is a sprite 0 hit.
-The PPU detects this condition and sets bit 6 of PPUSTATUS ($2002) to 1 starting at this pixel,
-letting the CPU know how far along the PPU is in drawing the picture.
+    Sprite 0 hits
+    Sprites are conventionally numbered 0 to 63. Sprite 0 is the sprite controlled by OAM addresses $00-$03,
+    sprite 1 is controlled by $04-$07, ..., and sprite 63 is controlled by $FC-$FF.
+    While the PPU is drawing the picture, when an opaque pixel of sprite 0 overlaps an opaque pixel of the background, this is a sprite 0 hit.
+    The PPU detects this condition and sets bit 6 of PPUSTATUS ($2002) to 1 starting at this pixel,
+    letting the CPU know how far along the PPU is in drawing the picture.
 
-Sprite 0 hit does not happen:
-If background or sprite rendering is disabled in PPUMASK ($2001)
-At x=0 to x=7 if the left-side clipping window is enabled (if bit 2 or bit 1 of PPUMASK is 0).
-At x=255, for an obscure reason related to the pixel pipeline.
-At any pixel where the background or sprite pixel is transparent (2-bit color index from the CHR pattern is %00).
-If sprite 0 hit has already occurred this frame. Bit 6 of PPUSTATUS ($2002) is cleared to 0 at dot 1 of the pre-render line.
-This means only the first sprite 0 hit in a frame can be detected.
+    Sprite 0 hit does not happen:
+    If background or sprite rendering is disabled in PPUMASK ($2001)
+    At x=0 to x=7 if the left-side clipping window is enabled (if bit 2 or bit 1 of PPUMASK is 0).
+    At x=255, for an obscure reason related to the pixel pipeline.
+    At any pixel where the background or sprite pixel is transparent (2-bit color index from the CHR pattern is %00).
+    If sprite 0 hit has already occurred this frame. Bit 6 of PPUSTATUS ($2002) is cleared to 0 at dot 1 of the pre-render line.
+    This means only the first sprite 0 hit in a frame can be detected.
 
-Sprite 0 hit happens regardless of the following:
-Sprite priority. Sprite 0 can still hit the background from behind.
-The pixel colors. Only the CHR pattern bits are relevant, not the actual rendered colors,
-and any CHR color index except %00 is considered opaque.
-The palette. The contents of the palette are irrelevant to sprite 0 hits.
-For example: a black ($0F) sprite pixel can hit a black ($0F) background as long as neither is the transparent color index %00.
-The PAL PPU blanking on the left and right edges at x=0, x=1, and x=254 (see Overscan). */
+    Sprite 0 hit happens regardless of the following:
+    Sprite priority. Sprite 0 can still hit the background from behind.
+    The pixel colors. Only the CHR pattern bits are relevant, not the actual rendered colors,
+    and any CHR color index except %00 is considered opaque.
+    The palette. The contents of the palette are irrelevant to sprite 0 hits.
+    For example: a black ($0F) sprite pixel can hit a black ($0F) background as long as neither is the transparent color index %00.
+    The PAL PPU blanking on the left and right edges at x=0, x=1, and x=254 (see Overscan). */
                         if (sprite.index == 0 &&
-                            isTranslucentBackground.not() &&
-                            //ppuRegisters.ppuMask.isShowBackground && // isTranslucentBackground.not() でチェック済みとなる
+                            isTranslucentBackgroundPixel.not() &&
+                            //ppuRegisters.ppuMask.isShowBackground && // isTranslucentBackgroundPixel.not() でチェック済みとなる
                             ppuRegisters.ppuStatus.isSprite0Hit.not() &&
-                            (x >= 8 || (ppuRegisters.ppuMask.isShowBackgroundLeft8Pixels
+                            (ppuX >= 8 || (ppuRegisters.ppuMask.isShowBackgroundLeft8Pixels
                                     && ppuRegisters.ppuMask.isShowSpriteLeft8Pixels)) &&
-                            x != NTSC_PPU_VISIBLE_LINE_LAST_X
+                            ppuX != NTSC_PPU_VISIBLE_LINE_LAST_X
                         ) {
                             ppuRegisters.ppuStatus.isSprite0Hit = true
                         }
@@ -423,150 +650,22 @@ The PAL PPU blanking on the left and right edges at x=0, x=1, and x=254 (see Ove
                 }
             }
         }
-        // スプライトが表示無効でも次の行のフェッチは行う
-        if (x == NTSC_PPU_VISIBLE_LINE_LAST_X + 1) {
-            // 次のラインのフェッチ（実際は64～256で実行されるみたい⇒違うかも／左記はバックグラウンドの話？）
-            val fetched = fetchSprites(line = y).take(n = 9).toList()
-            lineSprites = fetched.take(n = 8)
-            // 実機はバグがあるため実際の動作とは違うが、一応スプライトオーバーフローを設定
-            if (fetched.size > 8) {
-                ppuRegisters.ppuStatus.isSpriteOverflow = true
-            }
-        }
-        // https://www.nesdev.org/wiki/PPU_registers#Values_during_rendering
-        // OAMADDR is set to 0 during each of ticks 257–320 (the sprite tile loading interval) of the pre-render and visible scanlines.
-        // This also means that at the end of a normal complete rendered frame, OAMADDR will always have returned to 0.
-        if (x > NTSC_PPU_VISIBLE_LINE_LAST_X + 2 && (y <= NTSC_PPU_VISIBLE_FRAME_LAST_LINE || y == NTSC_PPU_PRE_RENDER_LINE)) {
-            ppuRegisters.oamAddress = 0u
-        }
-    }
 
-    private fun notifyRisingA12IfNeeded(x: Int, y: Int) {
-        if (ppuRegisters.ppuMask.isShowBackground || ppuRegisters.ppuMask.isShowSprite) {
-            /* Regarding PPU A12:
-                When using 8x8 sprites,
-                 if the BG uses $0000, and the sprites use $1000, the IRQ counter should decrement on PPU cycle 260,
-                 right after the visible part of the target scanline has ended.
-                When using 8x8 sprites,
-                 if the BG uses $1000, and the sprites use $0000, the IRQ counter should decrement on PPU cycle 324
-                 of the previous scanline (as in, right before the target scanline is about to be drawn).
-                 However, the 2C02's pre-render scanline will decrement the counter twice every other vertical redraw,
-                 so the IRQ will shake one scanline.
-                 This is visible in Wario's Woods:
-                  with some PPU-CPU reset alignments the bottom line of the green grass of the play area may flicker black
-                  on the rightmost ~48 pixels, due to an extra count firing the IRQ one line earlier than expected.
-                When using 8x16 sprites PPU A12 must be explicitly tracked.
-                 The exact time and number of times the counter is clocked will depend on the specific set of sprites
-                 present on every scanline.
-                 Specific combinations of sprites could cause the counter to decrement up to four times,
-                 or the IRQ to be delayed or early by some multiple of 8 pixels.
-                 If there are fewer than 8 sprites on a scanline, the PPU fetches tile $FF ($1FF0-$1FFF)
-                 for each leftover sprite and discards its value.
-                 Thus if a game uses 8x16 sprites with its background and sprites from PPU $0000,
-                 then the MMC3 ends up counting each scanline that doesn't use all eight sprites. */
-            if (y <= NTSC_PPU_VISIBLE_FRAME_LAST_LINE || y == NTSC_PPU_PRE_RENDER_LINE) {
-                // A12が立ち上がるのはパターンテーブルアクセスのアドレスの12ビット目(A12:マスク0x1000)が0から1になるときみたい
-                if (ppuRegisters.ppuControl.isSprite8x16) {
-                    // アドレスは各スプライトの設定を使用する
-                    // 上記説明文にスキャンライン毎に詳細を追わないとダメと書いてある
-                    // FCEUXは、基本は全スキャンラインで１回呼んでいるっぽい
-                    // https://github.com/TASEmulators/fceux/blob/f980ec2bc7dc962f6cd76b9ae3131f2eb902c9e7/src/ppu.cpp#L1378
-                    // https://www.nesdev.org/wiki/MMC3#IRQ_Specifics
-                    // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
-                    when (x) {
-                        260, 268, 276, 284, 292, 300, 308, 316, 324 -> {
-                            val lineSprites = lineSprites
-                            val backgroundPatternTableAddress =
-                                ppuRegisters.ppuControl.backgroundPatternTableAddress
-                            val addresses = listOf(
-                                backgroundPatternTableAddress,
-                                lineSprites.getOrNull(index = 0)?.spritePatternTableAddress ?: 0x1000,
-                                lineSprites.getOrNull(index = 1)?.spritePatternTableAddress ?: 0x1000,
-                                lineSprites.getOrNull(index = 2)?.spritePatternTableAddress ?: 0x1000,
-                                lineSprites.getOrNull(index = 3)?.spritePatternTableAddress ?: 0x1000,
-                                lineSprites.getOrNull(index = 4)?.spritePatternTableAddress ?: 0x1000,
-                                lineSprites.getOrNull(index = 5)?.spritePatternTableAddress ?: 0x1000,
-                                lineSprites.getOrNull(index = 6)?.spritePatternTableAddress ?: 0x1000,
-                                lineSprites.getOrNull(index = 7)?.spritePatternTableAddress ?: 0x1000,
-                                backgroundPatternTableAddress,
-                            ).take(n = (x - 260) / 8 + 2).takeLast(n = 2)
-                            // A12が立ち上がった時（0⇒1）に通知
-                            if (addresses.first() == 0x0000 && addresses.last() != 0x0000) {
-                                stateObserver.notifyRisingA12PPU()
-                            }
-                        }
-                    }
-                } else if (x == 260) {
-                    // PPU cycle 260
-                    val backgroundPatternTableAddress = ppuRegisters.ppuControl.backgroundPatternTableAddress
-                    if (backgroundPatternTableAddress != ppuRegisters.ppuControl.spritePatternTableAddress) {
-                        if (backgroundPatternTableAddress == 0x0000) {
-                            stateObserver.notifyRisingA12PPU()
-                        }
-                    }
-                } else if (x == 324) {
-                    // PPU cycle 324 of the previous scanline
-                    val backgroundPatternTableAddress = ppuRegisters.ppuControl.backgroundPatternTableAddress
-                    if (backgroundPatternTableAddress != ppuRegisters.ppuControl.spritePatternTableAddress) {
-                        if (backgroundPatternTableAddress != 0x0000) {
-                            stateObserver.notifyRisingA12PPU()
-                        }
-                    }
-                }
-            }
-        }
-    }
+        // 各ラインの処理
+        executeLine0to239IfNeeded(ppuX = ppuX, ppuY = ppuY)
+        executeLine240IfNeeded(ppuY = ppuY)
+        executeLine241IfNeeded(ppuX = ppuX, ppuY = ppuY)
+        executeLine261IfNeeded(ppuX = ppuX, ppuY = ppuY)
 
-    private fun applyFlagsAndInterrupt(x: Int, y: Int) {
-        // 各種フラグ設定解除
-        if (x == 1) {
-            if (y == NTSC_PPU_POST_RENDER_LINE + 1) {
-                // Line 241 の１ドット目（２番目のドット）にきてたら VBLANK フラグを立てて NMI 割り込みする
-                // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
-                ppuRegisters.ppuStatus.isVerticalBlankHasStarted = true
-                if (ppuRegisters.ppuControl.isVerticalBlankingInterval) {
-                    // https://www.nesdev.org/wiki/NMI
-                    //  Two 1-bit registers inside the PPU control the generation of NMI signals.
-                    //  Frame timing and accesses to the PPU's PPUCTRL and PPUSTATUS registers change these registers as follows,
-                    //  regardless of whether rendering is enabled:
-                    //  1.Start of vertical blanking: Set NMI_occurred in PPU to true.
-                    //  2.End of vertical blanking, sometime in pre-render scanline: Set NMI_occurred to false.
-                    //  3.Read PPUSTATUS: Return old status of NMI_occurred in bit 7, then set NMI_occurred to false.
-                    //  4.Write to PPUCTRL: Set NMI_output to bit 7.
-                    //  The PPU pulls /NMI low if and only if both NMI_occurred and NMI_output are true.
-                    //  By toggling NMI_output (PPUCTRL.7) during vertical blank without reading PPUSTATUS,
-                    //  a program can cause /NMI to be pulled low multiple times, causing multiple NMIs to be generated.
-                    interrupter.requestNMI()
-                }
-            } else if (y == NTSC_PPU_PRE_RENDER_LINE) {
-                // line 261の先頭１ドット目（２番目のドット）で各フラグのクリア
-                // https://www.nesdev.org/w/images/default/4/4f/Ppu.svg
-                ppuRegisters.ppuStatus.isVerticalBlankHasStarted = false
-                ppuRegisters.ppuStatus.isSprite0Hit = false
-                ppuRegisters.ppuStatus.isSpriteOverflow = false
-            }
-        }
-    }
+        // ラインのドット描画
+        drawLine(ppuX = ppuX, ppuY = ppuY)
 
-    private var lineSprites: List<Sprite> = emptyList()
+        // VBLANK関連のフラグクリア
+        isWrittenVerticalBlankFlag = false
+        isClearedVerticalBlankHasStartedFlag = false
 
-    private fun fetchSprites(line: Int): Sequence<Sprite> {
-        // スプライト番号が若い方が前面／前面順で取得
-        val spriteHeight = if (ppuRegisters.ppuControl.isSprite8x16) 16 else 8
-        return (0..<objectAttributeMemory.size / 4)
-            .asSequence()
-            .map { no -> Sprite(ppuBus, ppuRegisters.ppuControl, objectAttributeMemory, no) }
-            .filter { sprite -> (line - (sprite.offsetY - 1) in 0..<spriteHeight) }
-    }
-
-    private fun getColorNo(patternTableAddress: Int, tileNo: Int, relativeX: Int, relativeY: Int): Int {
-        val patternAddress = patternTableAddress + tileNo * PATTERN_TABLE_ELEMENT_SIZE + relativeY
-        val patternL = ppuBus.readMemory(address = patternAddress)
-        val patternH = ppuBus.readMemory(address = patternAddress + PATTERN_TABLE_ELEMENT_SIZE / 2)
-        val patternBitPos = 7 - relativeX
-        val colorNoL = (patternL.toInt() shr patternBitPos) and 0x01
-        val colorNoH = ((patternH.toInt() shl 1) shr patternBitPos) and 0x02
-        return colorNoH or colorNoL
+        // インクリメント等（フレーム終了判定付き）
+        return executeIncrement()
     }
 
     private fun getPalette(isSprite: Boolean, paletteH: Int, colorNo: Int): UByte {

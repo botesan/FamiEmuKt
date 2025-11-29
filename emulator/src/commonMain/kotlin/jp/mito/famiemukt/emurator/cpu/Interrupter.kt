@@ -6,7 +6,7 @@ enum class InterruptType(val executeCycle: Int) {
 
 interface Interrupter {
     fun requestREST()
-    fun requestNMI()
+    fun requestNMI(levelLow: Boolean = true)
     fun requestOnIRQ()
     fun requestOffIRQ()
     val isRequestedIRQ: Boolean

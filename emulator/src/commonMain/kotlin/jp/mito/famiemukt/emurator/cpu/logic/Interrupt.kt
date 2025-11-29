@@ -50,6 +50,7 @@ fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) 
             // break flagをクリア、bit 5 は予約で 1 セット済み（のはず）
             val p = registers.P.copy().apply { B = false }.value
             push(value = p, bus, registers)
+//println("NMI PUSH : PC=${pc.toHex()} P=${p.toHex()}")
             // 割り込み
             registers.PC = bus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
             registers.P.I = true
@@ -66,6 +67,7 @@ fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) 
             // break flagをクリア、bit 5 は予約で 1 セット済み（のはず）
             val p = registers.P.copy().apply { B = false }.value
             push(value = p, bus, registers)
+//println("IRQ PUSH : PC=${pc.toHex()} P=${p.toHex()}")
             // 割り込み
             registers.PC = bus.readWordMemIO(address = INTERRUPT_ADDRESS_IRQ)
             registers.P.I = true
@@ -91,6 +93,7 @@ fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) 
             // break flagをセット、bit 5 は予約で 1 セット済み（のはず）
             val p = registers.P.copy().apply { B = true }.value
             push(value = p, bus, registers)
+//println("BRK PUSH : PC=${pc.toUShort().toHex()} P=${p.toHex()}")
             // 割り込み
             registers.PC = bus.readWordMemIO(address = INTERRUPT_ADDRESS_BRK)
             // TODO: 上記読み間違い？必要？
