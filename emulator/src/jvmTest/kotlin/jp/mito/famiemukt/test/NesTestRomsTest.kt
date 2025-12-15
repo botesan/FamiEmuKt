@@ -1,4 +1,4 @@
-package jp.mito.famiemukt.test.cpu
+package jp.mito.famiemukt.test
 
 import jp.mito.famiemukt.emurator.NesSystem
 import jp.mito.famiemukt.emurator.apu.AudioSampleNotifier
@@ -46,6 +46,14 @@ class NesTestRomsTest {
     @Test
     fun testInstrOfficial_16() = checkRom("nes-test-roms/instr_test-v5/rom_singles/16-special.nes")
 
+    /////////////////////////////////////////////
+
+    @Test
+    fun testInstrTiming_1() = checkRom("nes-test-roms/instr_timing/rom_singles/1-instr_timing.nes")
+
+    @Test
+    fun testInstrTiming_2() = checkRom("nes-test-roms/instr_timing/rom_singles/2-branch_timing.nes")
+
     ///////////////////////////////////
 
     @Test
@@ -68,7 +76,6 @@ class NesTestRomsTest {
     @Test
     fun testCPUInterrupt_2() = checkRom("nes-test-roms/cpu_interrupts_v2/rom_singles/2-nmi_and_brk.nes")
 
-    // TODO: 画面を見るに成功していない（最後まで画面表示されない／途中で非公式コマンドが実行されている）
     @Test
     fun testCPUInterrupt_3() = checkRom("nes-test-roms/cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes")
 
@@ -77,6 +84,19 @@ class NesTestRomsTest {
 
     @Test
     fun testCPUInterrupt_5() = checkRom("nes-test-roms/cpu_interrupts_v2/rom_singles/5-branch_delays_irq.nes")
+
+    /////////////////////////////////////////////
+
+    // TODO: 画面表示で実行するとすぐ画面が消える
+    //  説明に書いてあるアート？も表示されない（止まっているように見える）
+    //  他のエミュレータとかでどんな感じで動くか確認した方がいい？
+    @Test
+    fun testPPUReadBuffer() = checkRom("nes-test-roms/ppu_read_buffer/test_ppu_read_buffer.nes")
+
+    /////////////////////////////////////////////
+
+    @Test
+    fun testPPUOpenBus() = checkRom("nes-test-roms/ppu_open_bus/ppu_open_bus.nes")
 
     /////////////////////////////////////////////
 
@@ -140,6 +160,26 @@ class NesTestRomsTest {
     ///////////////////////////////////
 
     @Test
+    fun testAPUReset_1() = checkRom("nes-test-roms/apu_reset/4015_cleared.nes")
+
+    @Test
+    fun testAPUReset_2() = checkRom("nes-test-roms/apu_reset/4017_timing.nes")
+
+    @Test
+    fun testAPUReset_3() = checkRom("nes-test-roms/apu_reset/4017_written.nes")
+
+    @Test
+    fun testAPUReset_4() = checkRom("nes-test-roms/apu_reset/irq_flag_cleared.nes")
+
+    @Test
+    fun testAPUReset_5() = checkRom("nes-test-roms/apu_reset/len_ctrs_enabled.nes")
+
+    ///////////////////////////////////
+
+    @Test
+    fun testOAMRead() = checkRom("nes-test-roms/oam_read/oam_read.nes")
+
+    @Test
     fun testOAMStress() = checkRom("nes-test-roms/oam_stress/oam_stress.nes")
 
     /////////////////////////////////////////////
@@ -197,10 +237,10 @@ class NesTestRomsTest {
     /////////////////////////////////////////////
 
     @Test
-    fun testExecSpace_apu() = checkRom("nes-test-roms/cpu_exec_space/test_cpu_exec_space_apu.nes")
+    fun testExecSpaceApu() = checkRom("nes-test-roms/cpu_exec_space/test_cpu_exec_space_apu.nes")
 
     @Test
-    fun testExecSpace_ppuio() = checkRom("nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes")
+    fun testExecSpacePpuIo() = checkRom("nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes")
 
     /////////////////////////////////////////////
 
@@ -219,6 +259,7 @@ class NesTestRomsTest {
     @Test
     fun testMM3Test_5() = checkRom("nes-test-roms/mmc3_test_2/rom_singles/5-MMC3.nes")
 
+    // 実装しなくても問題ない？
     @Test
     fun testMM3Test_6() = checkRom("nes-test-roms/mmc3_test_2/rom_singles/6-MMC3_alt.nes")
 
@@ -232,13 +273,28 @@ class NesTestRomsTest {
             override fun notifySample(value: UByte) = Unit
         }
         var count = 0L
+        var resetRequestedCount = 0L
         val system = NesSystem(cartridge, audioSampleNotifier, AUDIO_SAMPLING_RATE)
         system.reset()
         while (true) {
             val drawFrame = system.executeMasterClockStep()
             if (drawFrame.not()) continue
-            if (finishCheckResult(backupRAM, system)) break
-            if (++count > TIMEOUT_FRAME_COUNT) {
+            count++
+            when (finishCheckResult(backupRAM, system)) {
+                FinishResult.Continue -> Unit
+                FinishResult.Finish -> break
+                FinishResult.ResetRequest -> {
+                    if (resetRequestedCount == 0L) {
+                        resetRequestedCount = count
+                    }
+                    if (resetRequestedCount > 0 && count - resetRequestedCount > 20) {
+                        resetRequestedCount = -1L
+                        println("system.reset")
+                        system.reset()
+                    }
+                }
+            }
+            if (count > TIMEOUT_FRAME_COUNT) {
                 val data = backupRAM._backup
                 val code = data[0].toString(16).padStart(2, '0')
                 val key1 = data[1].toString(16).padStart(2, '0')
@@ -258,23 +314,24 @@ class NesTestRomsTest {
         }
     }
 
-    private fun finishCheckResult(backupRAM: BackupRAM, system: NesSystem): Boolean {
+    private enum class FinishResult {
+        Continue, ResetRequest, Finish,
+    }
+
+    private fun finishCheckResult(backupRAM: BackupRAM, system: NesSystem): FinishResult {
         val data = backupRAM._backup
         if (data[1] != 0xDE.toUByte() || data[2] != 0xB0.toUByte() || data[3] != 0x61.toUByte()) {
-            return false
+            return FinishResult.Continue
         }
         return when (data[0]) {
-            0x80.toUByte() -> false
-            0x81.toUByte() -> {
-                println("0x81 : need reset button")
-                false
-            }
-
+            0x80.toUByte() -> FinishResult.Continue
+            0x81.toUByte() -> FinishResult.ResetRequest
             0x00.toUByte() -> {
-                val message = data.drop(n = 4).takeWhile { it != 0.toUByte() }
-                    .toUByteArray().asByteArray().toString(Charsets.UTF_8)
-                println(message)
-                true
+                println(
+                    data.drop(n = 4).takeWhile { it != 0.toUByte() }
+                        .toUByteArray().asByteArray().toString(Charsets.UTF_8)
+                )
+                FinishResult.Finish
             }
 
             else -> {
@@ -339,10 +396,11 @@ class NesTestRomsTest {
             data[passFirst + 4] == 'E'.code.toUByte() &&
             data[passFirst + 5] == 'D'.code.toUByte()
         ) {
-            val message = data.asSequence().take(n = 0x400).windowed(size = 32, step = 32, partialWindows = true)
-                .map { String(it.toUByteArray().asByteArray(), Charsets.US_ASCII).trim { c -> c < ' ' }.trimEnd() }
-                .filter { it.isNotEmpty() }.joinToString(separator = "\n").trimEnd()
-            println(message)
+            println(
+                data.asSequence().take(n = 0x400).windowed(size = 32, step = 32, partialWindows = true)
+                    .map { String(it.toUByteArray().asByteArray(), Charsets.US_ASCII).trim { c -> c < ' ' }.trimEnd() }
+                    .filter { it.isNotEmpty() }.joinToString(separator = "\n").trimEnd()
+            )
             return true
         }
         if (failFirst in 0..<0x400 &&

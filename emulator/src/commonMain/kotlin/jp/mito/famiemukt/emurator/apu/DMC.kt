@@ -68,6 +68,7 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
             isDMCInterrupt = false
             interrupter.requestOffIRQ() // TODO: 合ってる？
         }
+//println("writeILR(${value.toHex()}) isLoop=$isLoop")
     }
 
     fun writeD(value: UByte) {
@@ -85,13 +86,20 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
         // $4013	LLLL LLLL	Sample length (L)
         // The length of the sample in bytes is set by register $4013 (length = %LLLL LLLL0001).
         lengthLoad = (value.toInt() shl 4) or 1
+//println("writeL(${value.toHex()}) timerCounter=$timerCounter, remainCounter=$remainCounter, length=$length, lengthLoad=$lengthLoad")
     }
 
     private var timerCounter: Int = 0
+    private var sampleBuffer: Int? = null
+    private var isSilent: Boolean = false
+
+    // メモリーリーダー
     private var address: Int = 0
     private var length: Int = 0
-    private var sampleBuffer: Int = 0
-    private var sampleBufferBitRemain: Int = 0
+
+    // 出力ユニット
+    private var remainCounter: Int = 0
+    private var shiftRegister: Int = 0
 
     override fun writeEnableStatus(value: UByte) {
         // $4015 write	---D NT21	Enable DMC (D), noise (N), triangle (T), and pulse channels (2/1)
@@ -99,17 +107,24 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
         // If the DMC bit is set, the DMC sample will be restarted only if its bytes remaining is 0.
         // If there are bits remaining in the 1-byte sample buffer, these will finish playing before the next sample is fetched.
         // Writing to this register clears the DMC interrupt flag.
+//print("writeEnableStatus(${value.toHex()}) isEnabledIRQ=$isEnabledIRQ, timerCounter=$timerCounter, remainCounter=$remainCounter, length=$length, lengthLoad=$lengthLoad => ")
         val enabled = (value.toInt() and 0b0001_0000) != 0
         if (enabled.not()) {
             length = 0
-        } else if (length == 0) { // TODO: 合っているか確認
+        } else if (length == 0) {
             address = addressLoad
             length = lengthLoad
-        } else {
-            length = 0 // TODO: 合っているか確認
         }
         isDMCInterrupt = false
-        interrupter.requestOffIRQ() // TODO: 合ってる？
+        interrupter.requestOffIRQ()
+        // 補充処理
+        //  https://www.nesdev.org/wiki/APU_DMC#Memory_reader
+        //  Any time the sample buffer is in an empty state and bytes remaining is not zero
+        //  (including just after a write to $4015 that enables the channel,
+        //   regardless of where that write occurs relative to the bit counter mentioned below),
+        //  the following occur:
+        fillingBufferIfNeeded(isReload = false)
+//println("remainCounter=$remainCounter, length=$length, lengthLoad=$lengthLoad")
     }
 
     override fun readEnableStatus(): UByte {
@@ -118,6 +133,7 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
         var status = 0
         if (length > 0) status = status or 0b0001_0000
         if (isDMCInterrupt) status = status or 0b1000_0000
+//println("readEnableStatus() => ${status.toUByte().toHex()}, timerCounter=$timerCounter, remainCounter=$remainCounter, length=$length, lengthLoad=$lengthLoad")
         return status.toUByte()
     }
 
@@ -126,38 +142,48 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
             timerCounter--
         } else {
             timerCounter = timer
-            if (sampleBufferBitRemain == 0) {
-                if (length == 0) return
-                sampleBuffer = cpuBus.readMemIO(address = address).toInt()
-                sampleBufferBitRemain = UByte.SIZE_BITS
-                // 厳密には追加 CPU Cycle は 4 以外の場合もある
-                // https://www.nesdev.org/wiki/APU_DMC#Memory_reader
-                // 4 cycles if it falls on a CPU read cycle.
-                // 3 cycles if it falls on a single CPU write cycle (or the second write of a double CPU write).
-                // 4 cycles if it falls on the first write of a double CPU write cycle.[4]
-                // 2 cycles if it occurs during an OAM DMA, or on the $4014 write cycle that triggers the OAM DMA.
-                // 1 cycle if it occurs on the second-last OAM DMA cycle.
-                // 3 cycles if it occurs on the last OAM DMA cycle.
-                // TODO: APUの追加CPU cyclesの加算方法の確認
-                dma.addDMCCycles(cycles = 4)
-                if (++address > 0xFFFF) address = 0x8000
-                if (--length == 0) {
-                    if (isLoop) {
-                        address = addressLoad
-                        length = lengthLoad
-                    } else if (isEnabledIRQ) {
-                        isDMCInterrupt = true
-                    }
+            /* https://www.nesdev.org/wiki/APU_DMC#Output_unit
+            Output unit
+            The output unit continuously outputs a 7-bit value to the mixer.
+            It contains an 8-bit right shift register, a bits-remaining counter,
+            a 7-bit output level (the same one that can be loaded directly via $4011), and a silence flag.
+            The bits-remaining counter is updated whenever the timer outputs a clock,
+            regardless of whether a sample is currently playing. When this counter reaches zero,
+            we say that the output cycle ends. The DPCM unit can only transition from silent to playing at the end of an output cycle.
+            When an output cycle ends, a new cycle is started as follows:
+                The bits-remaining counter is loaded with 8.
+                If the sample buffer is empty, then the silence flag is set; otherwise,
+                the silence flag is cleared and the sample buffer is emptied into the shift register.
+            When the timer outputs a clock, the following actions occur in order:
+              1.If the silence flag is clear, the output level changes based on bit 0 of the shift register.
+                If the bit is 1, add 2; otherwise, subtract 2.
+                But if adding or subtracting 2 would cause the output level to leave the 0-127 range,
+                leave the output level unchanged. This means subtract 2 only if the current level is at least 2,
+                or add 2 only if the current level is at most 125.
+              2.The right shift register is clocked.
+              3.As stated above, the bits-remaining counter is decremented. If it becomes zero, a new output cycle is started.
+                Nothing can interrupt a cycle; every cycle runs to completion before a new cycle is started. */
+            if (remainCounter == 0) {
+                remainCounter = 8
+                val sampleBuffer = sampleBuffer
+                if (sampleBuffer == null) {
+                    isSilent = true
+                } else {
+                    isSilent = false
+                    shiftRegister = sampleBuffer
+                    this.sampleBuffer = null
+                    fillingBufferIfNeeded(isReload = true)
                 }
-            } else {
-                if ((sampleBuffer and 0x01) == 0) {
+            }
+            if (isSilent.not()) {
+                if ((shiftRegister and 0x01) == 0) {
                     if (outputVolume > 1) outputVolume -= 2
                 } else {
                     if (outputVolume < 0x7E) outputVolume += 2
                 }
-                sampleBuffer = sampleBuffer ushr 1
-                sampleBufferBitRemain--
             }
+            shiftRegister = shiftRegister ushr 1
+            remainCounter--
         }
         // TODO: DMC割り込みフラグ内で処理をするのでは無く、フラグを確認して通知するのが正しい？
         // https://www.nesdev.org/wiki/APU_DMC#Memory_reader
@@ -174,6 +200,21 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
     override var outputVolume: Int = 0
         private set
 
+    private fun fillingBufferIfNeeded(isReload: Boolean) {
+        if (sampleBuffer == null && length > 0) {
+            dma.copyDMCSampleBuffer(address, isReload) { sampleBuffer = it.toInt() }
+            if (++address > 0xFFFF) address = 0x8000
+            if (--length == 0) {
+                if (isLoop) {
+                    address = addressLoad
+                    length = lengthLoad
+                } else if (isEnabledIRQ) {
+                    isDMCInterrupt = true
+                }
+            }
+        }
+    }
+
     fun debugInfo(nest: Int): String = buildString {
         append(" ".repeat(n = nest)).append("isEnabledIRQ=").appendLine(isEnabledIRQ)
         append(" ".repeat(n = nest)).append("isLoop=").appendLine(isLoop)
@@ -185,7 +226,7 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
         append(" ".repeat(n = nest)).append("address=").appendLine(address)
         append(" ".repeat(n = nest)).append("length=").appendLine(this@DMC.length)
         append(" ".repeat(n = nest)).append("sampleBuffer=").appendLine(sampleBuffer)
-        append(" ".repeat(n = nest)).append("sampleBufferBitRemain=").appendLine(sampleBufferBitRemain)
+        append(" ".repeat(n = nest)).append("remainCounter=").appendLine(remainCounter)
         append(" ".repeat(n = nest)).append("outputVolume=").appendLine(outputVolume)
     }
 

@@ -19,7 +19,7 @@ import jp.mito.famiemukt.emurator.cpu.addressing.Addressing
     +	+	+	-	-	-
     addressing	assembler	opc	bytes	cycles
     immediate	ALR #oper	4B	2	2 */
-object ALR : UnofficialOpCode(name = "ALR") {
+object ALR : UnofficialOpCode(name = "ALR", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = instruction.addressing.read(operand, bus)
@@ -29,7 +29,7 @@ object ALR : UnofficialOpCode(name = "ALR") {
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0U)
         registers.P.C = ((and.toUInt() and 0x01U) != 0U)
-        return operand.addCycle
+        return 0
     }
 }
 
@@ -47,7 +47,7 @@ object ALR : UnofficialOpCode(name = "ALR") {
     +	+	+	-	-	-
     addressing	assembler	opc	bytes	cycles
     immediate	ANC #oper	2B	2	2 */
-object ANC : UnofficialOpCode(name = "ANC") {
+object ANC : UnofficialOpCode(name = "ANC", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = instruction.addressing.read(operand, bus)
@@ -56,7 +56,7 @@ object ANC : UnofficialOpCode(name = "ANC") {
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
         registers.P.C = ((result.toUInt() and 0x80U) != 0U)
-        return operand.addCycle
+        return 0
     }
 }
 
@@ -70,7 +70,7 @@ object ANC : UnofficialOpCode(name = "ANC") {
     +	+	-	-	-	-
     addressing	assembler	opc	bytes	cycles
     immediate	ANE #oper	8B	2	2  	†† */
-object ANE : UnofficialOpCode(name = "ANE") {
+object ANE : UnofficialOpCode(name = "ANE", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val c = 0xff.toUByte() // 定数（環境依存。0x00,0xff,0xeeなど）
         val operand = instruction.addressing.operand(bus, registers)
@@ -79,7 +79,7 @@ object ANE : UnofficialOpCode(name = "ANE") {
         registers.A = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        return 0
     }
 }
 
@@ -98,7 +98,7 @@ object ANE : UnofficialOpCode(name = "ANE") {
                     parameter, then it shifts the accumulator to
                     the right. However, this is not the whole
                     truth. See the description below. */
-object ARR : UnofficialOpCode(name = "ARR") {
+object ARR : UnofficialOpCode(name = "ARR", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = instruction.addressing.read(operand, bus)
@@ -119,7 +119,7 @@ object ARR : UnofficialOpCode(name = "ARR") {
         }
         registers.P.Z = (result.toByte() == 0.toByte())
         registers.P.C = ((and.toUInt() and 0x80U) != 0U)
-        return operand.addCycle
+        return 0
     }
 }
 
@@ -135,7 +135,7 @@ object ARR : UnofficialOpCode(name = "ARR") {
    absolut,Y	DCP oper,Y	DB	3	7
    (indirect,X)	DCP (oper,X)	C3	2	8
    (indirect),Y	DCP (oper),Y	D3	2	8 */
-object DCP : UnofficialOpCode(name = "DCP") {
+object DCP : UnofficialOpCode(name = "DCP", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = bus.readMemIO(address = operand.operand)
@@ -161,7 +161,7 @@ object DCP : UnofficialOpCode(name = "DCP") {
    absolut,Y	ISC oper,Y	FB	3	7
    (indirect,X)	ISC (oper,X)	E3	2	8
    (indirect),Y	ISC (oper),Y	F3	2	8 */
-object ISB : UnofficialOpCode(name = "ISB") {
+object ISB : UnofficialOpCode(name = "ISB", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = bus.readMemIO(address = operand.operand)
@@ -186,7 +186,7 @@ object ISB : UnofficialOpCode(name = "ISB") {
     +	+	-	-	-	-
     addressing	assembler	opc	bytes	cycles
     absolute,Y	LAS oper,Y	BB	3	4* 	*/
-object LAS : UnofficialOpCode(name = "LAS") {
+object LAS : UnofficialOpCode(name = "LAS", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = instruction.addressing.read(operand, bus)
@@ -211,7 +211,7 @@ object LAS : UnofficialOpCode(name = "LAS") {
    absolut,Y	LAX oper,Y	BF	3	4*
    (indirect,X)	LAX (oper,X)	A3	2	6
    (indirect),Y	LAX (oper),Y	B3	2	5* */
-object LAX : UnofficialOpCode(name = "LAX") {
+object LAX : UnofficialOpCode(name = "LAX", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val result = bus.readMemIO(address = operand.operand)
@@ -233,7 +233,7 @@ object LAX : UnofficialOpCode(name = "LAX") {
    ---
    LXA $AB         C=Lehti:   A = X = ANE
                    Alternate: A = X = (A & #byte) */
-object LXA : UnofficialOpCode(name = "LXA") {
+object LXA : UnofficialOpCode(name = "LXA", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val c = 0xff.toUByte() // 定数（環境依存。0x00,0xff,0xeeなど？）
         val operand = instruction.addressing.operand(bus, registers)
@@ -259,7 +259,7 @@ object LXA : UnofficialOpCode(name = "LXA") {
    absolut,Y	RLA oper,Y	3B	3	7
    (indirect,X)	RLA (oper,X)	23	2	8
    (indirect),Y	RLA (oper),Y	33	2	8 */
-object RLA : UnofficialOpCode(name = "RLA") {
+object RLA : UnofficialOpCode(name = "RLA", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = bus.readMemIO(address = operand.operand)
@@ -286,7 +286,7 @@ object RLA : UnofficialOpCode(name = "RLA") {
    absolut,Y	RRA oper,Y	7B	3	7
    (indirect,X)	RRA (oper,X)	63	2	8
    (indirect),Y	RRA (oper),Y	73	2	8 */
-object RRA : UnofficialOpCode(name = "RRA") {
+object RRA : UnofficialOpCode(name = "RRA", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = bus.readMemIO(address = operand.operand)
@@ -316,7 +316,7 @@ object RRA : UnofficialOpCode(name = "RRA") {
    zeropage,Y	SAX oper,Y	97	2	4
    absolute	SAX oper	8F	3	4
    (indirect,X)	SAX (oper,X)	83	2	6 */
-object SAX : UnofficialOpCode(name = "SAX") {
+object SAX : UnofficialOpCode(name = "SAX", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val result = registers.A and registers.X
@@ -336,7 +336,7 @@ object SAX : UnofficialOpCode(name = "SAX") {
                     Carry flag will be set in substraction. This
                     is due to the CMP command, which is executed
                     instead of the real SBC. */
-object SBX : UnofficialOpCode(name = "SBX") {
+object SBX : UnofficialOpCode(name = "SBX", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = instruction.addressing.read(operand, bus)
@@ -362,7 +362,7 @@ object SBX : UnofficialOpCode(name = "SBX") {
     SHA $93,$9F     Store (A & X & (ADDR_HI + 1))
                     Note: The value to be stored is copied also
                     to ADDR_HI if page boundary is crossed. */
-object SHA : UnofficialOpCode(name = "SHA") {
+object SHA : UnofficialOpCode(name = "SHA", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val result = (registers.A and registers.X and ((operand.operand ushr 8) + 1).toUByte())
@@ -383,7 +383,7 @@ object SHA : UnofficialOpCode(name = "SHA") {
     SHX $9E         Store (X & (ADDR_HI + 1))
                     Note: The value to be stored is copied also
                     to ADDR_HI if page boundary is crossed. */
-object SHX : UnofficialOpCode(name = "SHX") {
+object SHX : UnofficialOpCode(name = "SHX", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val result = (registers.X and ((operand.operand ushr 8) + 1).toUByte())
@@ -408,7 +408,7 @@ object SHX : UnofficialOpCode(name = "SHX") {
     SHY $9C         Store (Y & (ADDR_HI + 1))
                     Note: The value to be stored is copied also
                     to ADDR_HI if page boundary is crossed. */
-object SHY : UnofficialOpCode(name = "SHY") {
+object SHY : UnofficialOpCode(name = "SHY", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val result = (registers.Y and ((operand.operand ushr 8) + 1).toUByte())
@@ -433,7 +433,7 @@ object SHY : UnofficialOpCode(name = "SHY") {
    absolut,Y	SLO oper,Y	1B	3	7
    (indirect,X)	SLO (oper,X)	03	2	8
    (indirect),Y	SLO (oper),Y	13	2	8 */
-object SLO : UnofficialOpCode(name = "SLO") {
+object SLO : UnofficialOpCode(name = "SLO", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = bus.readMemIO(address = operand.operand)
@@ -460,7 +460,7 @@ object SLO : UnofficialOpCode(name = "SLO") {
    absolut,Y	SRE oper,Y	5B	3	7
    (indirect,X)	SRE (oper,X)	43	2	8
    (indirect),Y	SRE (oper),Y	53	2	8  	*/
-object SRE : UnofficialOpCode(name = "SRE") {
+object SRE : UnofficialOpCode(name = "SRE", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val memory = bus.readMemIO(address = operand.operand)
@@ -487,7 +487,7 @@ object SRE : UnofficialOpCode(name = "SRE") {
     SHS $9B         SHA and TXS, where X is replaced by (A & X).
                     Note: The value to be stored is copied also
                     to ADDR_HI if page boundary is crossed. */
-object TAS : UnofficialOpCode(name = "TAS") {
+object TAS : UnofficialOpCode(name = "TAS", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         val ax = registers.A and registers.X
@@ -505,7 +505,7 @@ object TAS : UnofficialOpCode(name = "TAS") {
     +	+	+	-	-	+
     addressing	assembler	opc	bytes	cycles
     immediate	USBC #oper	EB	2	2  	*/
-object USBC : UnofficialOpCode(name = "SBC") {
+object USBC : UnofficialOpCode(name = "SBC", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int =
         SBC.execute(instruction, bus, registers)
 }
@@ -543,7 +543,7 @@ object USBC : UnofficialOpCode(name = "SBC") {
    7C	absolute,X	3	4*
    DC	absolute,X	3	4*
    FC	absolute,X	3	4* */
-object NOPs : UnofficialOpCode(name = "NOP") {
+object NOPs : UnofficialOpCode(name = "NOP", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int =
         when (instruction.addressing) {
             Addressing.Implied -> 0
@@ -555,6 +555,6 @@ object NOPs : UnofficialOpCode(name = "NOP") {
    These instructions freeze the CPU.
    The processor will be trapped infinitely in T1 phase with $FF on the data bus. — Reset required.
    Instruction codes: 02, 12, 22, 32, 42, 52, 62, 72, 92, B2, D2, F2 */
-object JAM : UnofficialOpCode(name = "JAM") {
+object JAM : UnofficialOpCode(name = "JAM", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int = error(name)
 }

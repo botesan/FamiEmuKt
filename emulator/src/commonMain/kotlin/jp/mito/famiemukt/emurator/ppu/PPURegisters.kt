@@ -1,19 +1,41 @@
 package jp.mito.famiemukt.emurator.ppu
 
+import jp.mito.famiemukt.emurator.cartridge.A12
 import jp.mito.famiemukt.emurator.util.*
 
 /*
 https://www.nesdev.org/wiki/PPU_registers
  */
 data class PPURegisters(
-    val internal: PPUInternalRegister = PPUInternalRegister(),
-    val ppuControl: PPUControl = PPUControl(internal),
-    val ppuMask: PPUMask = PPUMask(),
-    val ppuStatus: PPUStatus = PPUStatus(),
-    var oamAddress: UByte = 0U,
-    val ppuScroll: PPUScroll = PPUScroll(internal),
-    val ppuAddress: PPUAddress = PPUAddress(internal),
-)
+    val internal: PPUInternalRegister,
+    val ppuControl: PPUControl,
+    val ppuMask: PPUMask,
+    val ppuStatus: PPUStatus,
+    var oamAddress: UByte,
+    val ppuScroll: PPUScroll,
+    val ppuAddress: PPUAddress,
+) {
+    companion object {
+        operator fun invoke(
+            a12: A12,
+            internal: PPUInternalRegister = PPUInternalRegister(a12 = a12),
+            ppuControl: PPUControl = PPUControl(internal),
+            ppuMask: PPUMask = PPUMask(),
+            ppuStatus: PPUStatus = PPUStatus(),
+            oamAddress: UByte = 0U,
+            ppuScroll: PPUScroll = PPUScroll(internal),
+            ppuAddress: PPUAddress = PPUAddress(internal),
+        ): PPURegisters = PPURegisters(
+            internal = internal,
+            ppuControl = ppuControl,
+            ppuMask = ppuMask,
+            ppuStatus = ppuStatus,
+            oamAddress = oamAddress,
+            ppuScroll = ppuScroll,
+            ppuAddress = ppuAddress,
+        )
+    }
+}
 
 /*
 7  bit  0
@@ -86,9 +108,9 @@ data class PPUMask(var value: UByte = 0U) {
     val isShowSpriteLeft8Pixels: Boolean get() = ((value and BIT_MASK_2) != 0.toUByte())
     val isShowBackground: Boolean get() = ((value and BIT_MASK_3) != 0.toUByte())
     val isShowSprite: Boolean get() = ((value and BIT_MASK_4) != 0.toUByte())
-    private val isEmphasizeRed: Boolean get() = ((value and BIT_MASK_5) != 0.toUByte())
-    private val isEmphasizeGreen: Boolean get() = ((value and BIT_MASK_6) != 0.toUByte())
-    private val isEmphasizeBlue: Boolean get() = ((value and BIT_MASK_7) != 0.toUByte())
+    val isEmphasizeRed: Boolean get() = ((value and BIT_MASK_5) != 0.toUByte())
+    val isEmphasizeGreen: Boolean get() = ((value and BIT_MASK_6) != 0.toUByte())
+    val isEmphasizeBlue: Boolean get() = ((value and BIT_MASK_7) != 0.toUByte())
     override fun toString(): String =
         """
         |PPUMask(0x${value.toString(16).padStart(2, '0')})
@@ -165,12 +187,27 @@ yyy NN YYYYY XXXXX
 ||| ++-------------- nametable select
 +++----------------- fine Y scroll
  */
-data class PPUInternalRegister(
-    var t: UShort = 0U,
-    var v: UShort = 0U,
+class PPUInternalRegister(
+
     var x: UByte = 0U,
     var w: Boolean = false,
+    val a12: A12,
 ) {
+    override fun toString(): String =
+        "PPUInternalRegister(t=${t.toString(radix = 2)},v=${v.toString(radix = 2)},x=${x.toString(radix = 2)},w=$w)"
+
+    var v: UShort = 0U
+
+    //        set(value) {
+//            field = value
+//            a12.address = value.toInt()
+//        }
+    var t: UShort = 0u
+//        set(value) {
+//            field = value
+//            a12.address = value.toInt()
+//        }
+
     // https://www.nesdev.org/wiki/PPU_scrolling
     // tile address      = 0x2000 | (v & 0x0FFF)
     val tileAddress: Int get() = 0x2000 or (v.toInt() and 0b000_11_11111_11111)
@@ -244,6 +281,8 @@ data class PPUInternalRegister(
             // High
             t = ((t and 0x00_FFU) or (value.toUInt() shl 8).toUShort()) and 0x3F_FFU
             w = true
+            // a12 // TODO: 動作確認
+            a12.address = t.toInt()
         }
     }
 

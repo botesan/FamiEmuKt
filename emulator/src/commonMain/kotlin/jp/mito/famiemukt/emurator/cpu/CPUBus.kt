@@ -31,23 +31,47 @@ $4000–$4017	$0018	NES APU and I/O registers
 $4018–$401F	$0008	APU and I/O functionality that is normally disabled. See CPU Test Mode.
 $4020–$FFFF	$BFE0	Cartridge space: PRG ROM, PRG RAM, and mapper registers
  */
-class CPUBus(
+interface CPUBus {
+    companion object {
+        operator fun invoke(
+            mapper: Mapper,
+            dma: DMA,
+            ram: RAM,
+            apu: APU,
+            ppu: PPU,
+            pad: Pad,
+        ): CPUBus = CPUBusImpl(
+            mapper = mapper,
+            dma = dma,
+            ram = ram,
+            apu = apu,
+            ppu = ppu,
+            pad = pad,
+        )
+    }
+
+    fun readWordMemIO(address: Int): UShort
+    fun readMemIO(address: Int): UByte
+    fun writeMemIO(address: Int, value: UByte)
+}
+
+class CPUBusImpl(
     private val mapper: Mapper,
     private val dma: DMA,
     private val ram: RAM,
     private val apu: APU,
     private val ppu: PPU,
     private val pad: Pad,
-) {
+) : CPUBus {
     init {
         apu.setCPUBus(cpuBus = this)
     }
 
-    fun readWordMemIO(address: Int): UShort {
+    override fun readWordMemIO(address: Int): UShort {
         return (readMemIO(address).toInt() or (readMemIO(address + 1).toInt() shl 8)).toUShort()
     }
 
-    fun readMemIO(address: Int): UByte {
+    override fun readMemIO(address: Int): UByte {
         return when (address) {
             in 0x0000..0x1FFF -> ram.read(address = address)
             // $2000–$2007	$0008	NES PPU registers
@@ -96,7 +120,7 @@ class CPUBus(
         }
     }
 
-    fun writeMemIO(address: Int, value: UByte) {
+    override fun writeMemIO(address: Int, value: UByte) {
         when (address) {
             in 0x0000..0x1FFF -> ram.write(address = address, value = value)
             // $2000–$2007	$0008	NES PPU registers

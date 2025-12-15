@@ -11,7 +11,7 @@ import jp.mito.famiemukt.emurator.cpu.Instruction
 //   CLC CLD CLI CLV SEC SED SEI
 
 /* CLC キャリーフラグをクリアします。[0.0.0.0.0.0.0.C] */
-object CLC : OfficialOpCode(name = "CLC") {
+object CLC : OfficialOpCode(name = "CLC", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         registers.P.C = false
         return 0
@@ -19,7 +19,7 @@ object CLC : OfficialOpCode(name = "CLC") {
 }
 
 /* CLD BCDモードから通常モードに戻ります。ファミコンでは実装されていません。[0.0.0.0.D.0.0.0] */
-object CLD : OfficialOpCode(name = "CLD") {
+object CLD : OfficialOpCode(name = "CLD", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         registers.P.D = false
         return 0
@@ -27,7 +27,7 @@ object CLD : OfficialOpCode(name = "CLD") {
 }
 
 /* CLI IRQ割り込みを許可します。[0.0.0.0.0.I.0.0] */
-object CLI : OfficialOpCode(name = "CLI") {
+object CLI : OfficialOpCode(name = "CLI", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         registers.P.I = false
         return 0
@@ -35,7 +35,7 @@ object CLI : OfficialOpCode(name = "CLI") {
 }
 
 /* CLV オーバーフローフラグをクリアします。[0.V.0.0.0.0.0.0] */
-object CLV : OfficialOpCode(name = "CLV") {
+object CLV : OfficialOpCode(name = "CLV", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         registers.P.V = false
         return 0
@@ -43,7 +43,7 @@ object CLV : OfficialOpCode(name = "CLV") {
 }
 
 /* SEC キャリーフラグをセットします。[0.0.0.0.0.0.0.C] */
-object SEC : OfficialOpCode(name = "SEC") {
+object SEC : OfficialOpCode(name = "SEC", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         registers.P.C = true
         return 0
@@ -51,7 +51,7 @@ object SEC : OfficialOpCode(name = "SEC") {
 }
 
 /* SED BCDモードに設定します。ファミコンでは実装されていません。[0.0.0.0.D.0.0.0] */
-object SED : OfficialOpCode(name = "SED") {
+object SED : OfficialOpCode(name = "SED", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         registers.P.D = true
         return 0
@@ -59,7 +59,7 @@ object SED : OfficialOpCode(name = "SED") {
 }
 
 /* SEI IRQ割り込みを禁止します。[0.0.0.0.0.I.0.0] */
-object SEI : OfficialOpCode(name = "SEI") {
+object SEI : OfficialOpCode(name = "SEI", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         registers.P.I = true
         return 0

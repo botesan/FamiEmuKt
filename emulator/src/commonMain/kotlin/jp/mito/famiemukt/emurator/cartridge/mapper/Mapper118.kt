@@ -75,6 +75,7 @@ class Mapper118(
     // Bank size 8k
     private val lastPRGBankNo: Int = cartridge.information.prgRom16Units * 2 - 1
     private val prgBankNoR: IntArray = IntArray(size = 8)
+    private val nametableNos: IntArray = IntArray(size = 8)
     private var selectedR: Int = 0
 
     private var isPRGMode0: Boolean = false
@@ -83,11 +84,8 @@ class Mapper118(
     private var irqCounter: Int = 0
     private var irqCounterTemp: Int = 0
     private var isReloadIRQCounter: Boolean = false
-    private var isMirrorConfig: Boolean = false
-    private var mirrorConfigSelectR: Int = 0
 
-    override var mirroring: Mirroring = defaultMirroring(information)
-        private set
+    override val mirroring: Mirroring = Mirroring.Other
     override val stateObserver: StateObserver = object : StateObserverAdapter() {
         override fun notifyRisingA12PPU() {
             /* Counter operation:
@@ -172,7 +170,7 @@ class Mapper118(
                         |          5: Select 1 KB CHR bank at PPU $1C00-$1FFF (or $0C00-$0FFF);
                         |          6, 7: as standard MMC3
                         +--------- Mirroring configuration, based on the last value written to Bank select register
-                                   0: Select Nametable at PPU $2000-$27FF TODO: $2000-23FF が正しい？（allowing only single-screen or horizontal mirroring）
+                                   0: Select Nametable at PPU $2000-$27FF
                                    1: Select Nametable at PPU $2800-$2FFF
                                    Note : Those bits are ignored if corresponding CHR banks are mapped at $1000-$1FFF via $8000.
                                    2 : Select Nametable at PPU $2000-$23FF
@@ -180,13 +178,8 @@ class Mapper118(
                                    4 : Select Nametable at PPU $2800-$2BFF
                                    5 : Select Nametable at PPU $2C00-$2FFF
                                    Note : Those bits are ignored if corresponding CHR banks are mapped at $1000-$1FFF via $8000. */
-                    isMirrorConfig = (value.toInt() and BIT_MASK_7.toInt() != 0)
-                    if (isMirrorConfig.not()) {
-                        prgBankNoR[selectedR] = value.toInt() and 0b0111_1111
-                    } else {
-                        mirroring = Mirroring.Other
-                        mirrorConfigSelectR = selectedR
-                    }
+                    nametableNos[selectedR] = value.toInt() ushr 7
+                    prgBankNoR[selectedR] = value.toInt() and 0b0111_1111
                 }
             }
 
@@ -201,7 +194,6 @@ class Mapper118(
                                 +- Mirroring
                                    This bit is bypassed by the configuration described above, so writing here has no effect. */
                     // なにもしない
-
                 } else {
                     /* https://www.nesdev.org/wiki/MMC3
                        PRG RAM protect ($A001-$BFFF, odd)
@@ -388,29 +380,20 @@ class Mapper118(
         Note : Those bits are ignored if corresponding CHR banks are mapped at $1000-$1FFF via $8000.
      */
     override fun calculateNameTableIndexMirroringOther(address: Int): Int {
-        val mirrorConfigSelectR = mirrorConfigSelectR
         val mirroredAddress = if (isCHRMode0) {
-            when (mirrorConfigSelectR) {
-                // TODO: 処理がおかしい？ FCEUX だとシングルスクリーンとして扱っているっぽい
-                // 0: Select Nametable at PPU $2000-$27FF  TODO: $2000-23FF が正しい？（allowing only single-screen or horizontal mirroring）
-                0 -> (address and 0x2C00.inv())
-                // 1: Select Nametable at PPU $2800-$2FFF
-                1 -> (address and 0x2000.inv()) or 0x0800
-                //
-                else -> error("Illegal mirrorConfigSelectR=$mirrorConfigSelectR, address=${address.toString(radix = 16)}")
+            when (address) {
+                in 0x2000..0x27FF -> (address and 0x2400.inv()) or (nametableNos[0] shl 11)
+                in 0x2800..0x2FFF -> (address and 0x2C00.inv()) or (nametableNos[1] shl 11)
+                else -> error("Illegal address=${address.toString(radix = 16)}")
             }
         } else {
-            when (mirrorConfigSelectR) {
-                // 2 : Select Nametable at PPU $2000-$23FF
-                2 -> (address and 0x2C00.inv())
-                // 3 : Select Nametable at PPU $2400-$27FF
-                3 -> (address and 0x2800.inv()) or 0x0400
-                // 4 : Select Nametable at PPU $2800-$2BFF
-                4 -> (address and 0x2400.inv()) or 0x0800
-                // 5 : Select Nametable at PPU $2C00-$2FFF
-                5 -> (address and 0x2000.inv()) or 0x0C00
-                //
-                else -> error("Illegal mirrorConfigSelectR=$mirrorConfigSelectR, address=${address.toString(radix = 16)}")
+            // TODO: 動作確認未チェック／実装合ってる？
+            when (address) {
+                in 0x2000..0x23FF -> (address and 0x2000.inv()) or (nametableNos[2] shl 11)
+                in 0x2400..0x27FF -> (address and 0x2000.inv()) or (nametableNos[3] shl 11)
+                in 0x2800..0x2BFF -> (address and 0x2800.inv()) or (nametableNos[4] shl 11)
+                in 0x2C00..0x2FFF -> (address and 0x2800.inv()) or (nametableNos[5] shl 11)
+                else -> error("Illegal address=${address.toString(radix = 16)}")
             }
         }
         return mirroredAddress

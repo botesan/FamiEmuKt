@@ -10,8 +10,10 @@ import jp.mito.famiemukt.emurator.cpu.Instruction
 //  Conditional Branch Instructions
 //   BCC BCS BEQ BMI BNE BPL BVC BVS
 
+sealed class BranchOpCode(name: String, isAddCyclePageCrossed: Boolean) : OfficialOpCode(name, isAddCyclePageCrossed)
+
 /* BCC キャリーフラグがクリアされている時にブランチします。[0.0.0.0.0.0.0.0] */
-object BCC : OfficialOpCode(name = "BCC") {
+object BCC : BranchOpCode(name = "BCC", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.C) {
@@ -24,7 +26,7 @@ object BCC : OfficialOpCode(name = "BCC") {
 }
 
 /* BCS キャリーフラグがセットされている時にブランチします。[0.0.0.0.0.0.0.0] */
-object BCS : OfficialOpCode(name = "BCS") {
+object BCS : BranchOpCode(name = "BCS", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.C.not()) {
@@ -37,7 +39,7 @@ object BCS : OfficialOpCode(name = "BCS") {
 }
 
 /* BEQ ゼロフラグがセットされている時にブランチします。[0.0.0.0.0.0.0.0] */
-object BEQ : OfficialOpCode(name = "BEQ") {
+object BEQ : BranchOpCode(name = "BEQ", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.Z.not()) {
@@ -50,7 +52,7 @@ object BEQ : OfficialOpCode(name = "BEQ") {
 }
 
 /* BMI ネガティブフラグがセットされている時にブランチします。[0.0.0.0.0.0.0.0] */
-object BMI : OfficialOpCode(name = "BMI") {
+object BMI : BranchOpCode(name = "BMI", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.N.not()) {
@@ -63,7 +65,7 @@ object BMI : OfficialOpCode(name = "BMI") {
 }
 
 /* BNE ゼロフラグがクリアされている時にブランチします。[0.0.0.0.0.0.0.0] */
-object BNE : OfficialOpCode(name = "BNE") {
+object BNE : BranchOpCode(name = "BNE", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.Z) {
@@ -76,7 +78,7 @@ object BNE : OfficialOpCode(name = "BNE") {
 }
 
 /* BPL ネガティブフラグがクリアされている時にブランチします。[0.0.0.0.0.0.0.0] */
-object BPL : OfficialOpCode(name = "BPL") {
+object BPL : BranchOpCode(name = "BPL", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.N) {
@@ -89,7 +91,7 @@ object BPL : OfficialOpCode(name = "BPL") {
 }
 
 /* BVC オーバーフローフラグがクリアされている時にブランチします。[0.0.0.0.0.0.0.0] */
-object BVC : OfficialOpCode(name = "BVC") {
+object BVC : BranchOpCode(name = "BVC", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.V) {
@@ -102,7 +104,7 @@ object BVC : OfficialOpCode(name = "BVC") {
 }
 
 /* BVS オーバーフローフラグがセットされている時にブランチします。[0.0.0.0.0.0.0.0] */
-object BVS : OfficialOpCode(name = "BVS") {
+object BVS : BranchOpCode(name = "BVS", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.V.not()) {

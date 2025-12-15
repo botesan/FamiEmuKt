@@ -18,16 +18,16 @@ import jp.mito.famiemukt.emurator.cpu.logic.push
 //   BRK RTI
 
 /* JMP アドレスへジャンプします。[0.0.0.0.0.0.0.0] */
-object JMP : OfficialOpCode(name = "JMP") {
+object JMP : OfficialOpCode(name = "JMP", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         registers.PC = operand.operand.toUShort()
-        return operand.addCycle
+        return 0
     }
 }
 
 /* JSR サブルーチンを呼び出します。[0.0.0.0.0.0.0.0] */
-object JSR : OfficialOpCode(name = "JSR") {
+object JSR : OfficialOpCode(name = "JSR", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val beforePC = registers.PC
         val operand = instruction.addressing.operand(bus, registers)
@@ -39,12 +39,12 @@ object JSR : OfficialOpCode(name = "JSR") {
         push(value = l, bus, registers)
         registers.PC = operand.operand.toUShort()
         printMovePCLog(command = "JSR", beforePC = beforePC, registers = registers)
-        return operand.addCycle
+        return 0
     }
 }
 
 /* RTS サブルーチンから復帰します。[0.0.0.0.0.0.0.0] */
-object RTS : OfficialOpCode(name = "RTS") {
+object RTS : OfficialOpCode(name = "RTS", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val beforePC = registers.PC
         // 下位バイトからpopしてPCへ（JSRでpushされているのは次の命令の手前のアドレス）
@@ -58,7 +58,7 @@ object RTS : OfficialOpCode(name = "RTS") {
 }
 
 /* BRK ソフトウェア割り込みを起こします。[0.0.0.B.0.0.0.0] */
-object BRK : OfficialOpCode(name = "BRK") {
+object BRK : OfficialOpCode(name = "BRK", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         executeInterruptBRK(bus, registers)
         return 0
@@ -68,7 +68,7 @@ object BRK : OfficialOpCode(name = "BRK") {
 /* RTI 割り込みルーチンから復帰します。[N.V.R.B.D.I.Z.C]
    The status register is pulled with the break flag and bit 5 ignored.
    Then PC is pulled from the stack. */
-object RTI : OfficialOpCode(name = "RTI") {
+object RTI : OfficialOpCode(name = "RTI", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val beforePC = registers.PC
         // break flag と bit 5 を無視（実質break flagを変更前で上書き）

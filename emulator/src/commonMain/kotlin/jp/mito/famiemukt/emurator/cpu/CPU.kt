@@ -1,8 +1,8 @@
 package jp.mito.famiemukt.emurator.cpu
 
 import jp.mito.famiemukt.emurator.NTSC_CPU_CYCLES_PER_MASTER_CLOCKS
-import jp.mito.famiemukt.emurator.cartridge.NothingStateObserver
-import jp.mito.famiemukt.emurator.cartridge.StateObserver
+import jp.mito.famiemukt.emurator.cartridge.NothingStateM2CycleObserver
+import jp.mito.famiemukt.emurator.cartridge.StateM2CycleObserver
 import jp.mito.famiemukt.emurator.cpu.addressing.fetch
 import jp.mito.famiemukt.emurator.cpu.instruction.BRK
 import jp.mito.famiemukt.emurator.cpu.instruction.JAM
@@ -17,7 +17,7 @@ class CPU(
     private val cpuRegisters: CPURegisters,
     private val cpuBus: CPUBus,
     private val dma: DMA,
-    private val stateObserver: StateObserver = NothingStateObserver(),
+    private val stateObserver: StateM2CycleObserver = NothingStateM2CycleObserver,
 ) {
     data class CPUResult(
         val addCycle: Int = 0,
@@ -81,7 +81,7 @@ class CPU(
         totalCPUClockCount++
         executingCPUClockCount++
         // DMAの処理待ち
-        if (dma.executeCPUCycleStepIfNeed(cpuBus = cpuBus, currentCycles = totalCPUClockCount)) {
+        if (dma.executeCPUCycleStepIfNeed(cpuBus = cpuBus, currentCPUCycles = totalCPUClockCount)) {
             executingCPUClockCount--
             return CPUResult(addCycle = 1)
         }

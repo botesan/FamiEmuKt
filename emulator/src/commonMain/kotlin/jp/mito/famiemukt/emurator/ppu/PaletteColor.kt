@@ -12,7 +12,7 @@ fun convertPaletteToRGB32(palette: UByte, ppuMask: PPUMask): Int =
         ppuMask.isGrayscale -> palette and 0x30U
         else -> palette
     }.let {
-        (ppuMask.value.toInt() and 0b1110_0000) or it.toInt()
+        ((ppuMask.value.toInt() and 0b1110_0000) shl 1) or it.toInt()
     }.let {
         FullPaletteColors[it].rgb32
     }
@@ -23,10 +23,30 @@ fun convertPaletteToRGB32(palette: UByte, ppuMask: PPUMask): Int =
 // The terminated measurements above suggest that resulting attenuated absolute voltage is approximately 0.81 times
 // the un-attenuated absolute voltage.
 private val FullPaletteColors = listOf(
-    paletteColors.toList(), // Normal
-    paletteColors.map { it.copy(g = (it.g * 4U / 5U).toUByte(), b = (it.b * 4U / 5U).toUByte()) }, // R
-    paletteColors.map { it.copy(r = (it.r * 4U / 5U).toUByte(), b = (it.b * 4U / 5U).toUByte()) }, // G
-    paletteColors.map { it.copy(r = (it.r * 4U / 5U).toUByte(), g = (it.g * 4U / 5U).toUByte()) }, // B
+    // Normal
+    paletteColors.toList(),
+    // __R
+    paletteColors.map { it.copy(g = (it.g * 4U / 5U).toUByte(), b = (it.b * 4U / 5U).toUByte()) },
+    // _G_
+    paletteColors.map { it.copy(r = (it.r * 4U / 5U).toUByte(), b = (it.b * 4U / 5U).toUByte()) },
+    // _GR
+    paletteColors.map {
+        it.copy(r = (it.r * 4U / 5U).toUByte(), g = (it.g * 4U / 5U).toUByte(), b = (it.b * 16U / 25U).toUByte())
+    },
+    // B__
+    paletteColors.map { it.copy(r = (it.r * 4U / 5U).toUByte(), g = (it.g * 4U / 5U).toUByte()) },
+    // B_R
+    paletteColors.map {
+        it.copy(r = (it.r * 4U / 5U).toUByte(), g = (it.g * 16U / 25U).toUByte(), b = (it.b * 4U / 5U).toUByte())
+    },
+    // BG_
+    paletteColors.map {
+        it.copy(r = (it.r * 16U / 25U).toUByte(), g = (it.g * 4U / 5U).toUByte(), b = (it.b * 4U / 5U).toUByte())
+    },
+    // BGR
+    paletteColors.map {
+        it.copy(r = (it.r * 16U / 25U).toUByte(), g = (it.g * 16U / 25U).toUByte(), b = (it.b * 16U / 25U).toUByte())
+    },
 ).flatten().toTypedArray()
 
 private val paletteColors: Array<PaletteColor>

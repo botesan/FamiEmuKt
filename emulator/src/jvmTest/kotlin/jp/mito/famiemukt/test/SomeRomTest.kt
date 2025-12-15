@@ -1,8 +1,9 @@
-package jp.mito.famiemukt.test.cpu
+package jp.mito.famiemukt.test
 
 import jp.mito.famiemukt.emurator.NTSC_CPU_CYCLES_PER_MASTER_CLOCKS
 import jp.mito.famiemukt.emurator.apu.APU
 import jp.mito.famiemukt.emurator.apu.AudioSampleNotifier
+import jp.mito.famiemukt.emurator.cartridge.A12
 import jp.mito.famiemukt.emurator.cartridge.BackupRAM
 import jp.mito.famiemukt.emurator.cartridge.Cartridge
 import jp.mito.famiemukt.emurator.cpu.*
@@ -24,18 +25,19 @@ class SomeRomTest {
     fun testHelloWorld() {
         var cpu: CPU? = null
         val ram = RAM()
-        val cpuRegisters = CPURegisters()
-        val ppuRegisters = PPURegisters()
         val iNesData = assertNotNull(actual = javaClass.classLoader.getResource("sample1/sample1.nes")).readBytes()
         val backupRAM = BackupRAM()
         val cartridge = Cartridge(backupRAM = backupRAM, iNesData = iNesData)
         val stateObserver = cartridge.mapper.stateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val cpuRegisters = CPURegisters()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = cartridge.mapper, videoRAM = videoRAM)
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
-            stateObserver = stateObserver,
+            a12 = a12,
             interrupter = object : Interrupter {
                 override fun requestREST() = cpu?.requestInterruptREST() ?: Unit
                 override fun requestNMI(levelLow: Boolean) = cpu?.requestInterruptNMI(levelLow) ?: Unit
@@ -70,27 +72,24 @@ class SomeRomTest {
                     if (result?.instruction != null) break
                 }
                 assertContains(range = 0x8000U..0xffffU, value = cpuRegisters.PC.toUInt())
-                print("${cpuRegisters.PC.toString(radix = 16).padStart(length = 4, padChar = '0')} : ")
-                print(" A:${cpuRegisters.A.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" X:${cpuRegisters.X.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" Y:${cpuRegisters.Y.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" S:${cpuRegisters.S.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" P:${cpuRegisters.P.value.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                println()
+                println(cpuRegisters.logString)
             } while (cpuRegisters.PC != beforePC)
         } finally {
-            println()
-            println("cartridge=${cartridge.information}")
-            println("cpuRegisters=$cpuRegisters")
-            println("ppuRegisters=$ppuRegisters")
-            println("palletTable=${videoRAM._palletTable.contentToString()}")
-            println("nameTable")
             println(
-                videoRAM._nameTable.chunked(size = 32).joinToString(separator = "\n") { bytes ->
-                    bytes.joinToString(separator = " ") { byte ->
-                        byte.toString(radix = 16).padStart(length = 2, padChar = '0')
+                """
+                |cartridge=${cartridge.information}
+                |cpuRegisters=$cpuRegisters
+                |ppuRegisters=$ppuRegisters
+                |palletTable=${videoRAM._palletTable.contentToString()}
+                |nameTable
+                |${
+                    videoRAM._nameTable.chunked(size = 32).joinToString(separator = "\n") { bytes ->
+                        bytes.joinToString(separator = " ") { byte ->
+                            byte.toString(radix = 16).padStart(length = 2, padChar = '0')
+                        }
                     }
                 }
+                |""".trimMargin().trimMargin()
             )
         }
     }
@@ -134,19 +133,20 @@ class SomeRomTest {
                 }
         var cpu: CPU? = null
         val ram = RAM()
-        val cpuRegisters = CPURegisters()
-        val ppuRegisters = PPURegisters()
         val backupRAM = BackupRAM()
         val iNesData =
             assertNotNull(actual = javaClass.classLoader.getResource("nes-test-roms/other/nestest.nes")).readBytes()
         val cartridge = Cartridge(backupRAM = backupRAM, iNesData = iNesData)
         val stateObserver = cartridge.mapper.stateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val cpuRegisters = CPURegisters()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = cartridge.mapper, videoRAM = videoRAM)
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
-            stateObserver = stateObserver,
+            a12 = a12,
             interrupter = object : Interrupter {
                 override fun requestREST() = cpu?.requestInterruptREST() ?: Unit
                 override fun requestNMI(levelLow: Boolean) = cpu?.requestInterruptNMI(levelLow) ?: Unit
@@ -178,21 +178,7 @@ class SomeRomTest {
             exceptedSequence.forEach { expected ->
                 println("[${expected.lineNo}]-------------------------------------------------------------------------------")
                 println(expected.line)
-                print(
-                    "expected ${expected.cpuRegisters.PC.toString(radix = 16).padStart(length = 4, padChar = '0')} : "
-                )
-                print(" A:${expected.cpuRegisters.A.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" X:${expected.cpuRegisters.X.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" Y:${expected.cpuRegisters.Y.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" S:${expected.cpuRegisters.S.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" P:${expected.cpuRegisters.P.value.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" | ")
-                print("actual ${cpuRegisters.PC.toString(radix = 16).padStart(length = 4, padChar = '0')} : ")
-                print(" A:${cpuRegisters.A.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" X:${cpuRegisters.X.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" Y:${cpuRegisters.Y.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                print(" S:${cpuRegisters.S.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
-                println(" P:${cpuRegisters.P.value.toString(radix = 16).padStart(length = 2, padChar = '0')}")
+                println("expected ${expected.cpuRegisters.logString} | actual ${cpuRegisters.logString}")
                 println("expected ppuX:${expected.ppuX} ${expected.ppuY} | actual ppuX=${ppu._ppuX} ppuY=${ppu._ppuY}")
                 //
                 assertEquals(expected = expected.cpuRegisters.PC, actual = cpuRegisters.PC)
@@ -213,7 +199,7 @@ class SomeRomTest {
                     apu.executeMasterClockStep()
                     if (result == null) continue
                     cycles += result.executeCycle
-                    println("$result")
+                    println(result)
                     assertEquals(expected = expected.commandName, actual = result.instruction?.opCode?.name)
                     assertEquals(
                         expected = result.executeCycle * NTSC_CPU_CYCLES_PER_MASTER_CLOCKS,
@@ -223,10 +209,25 @@ class SomeRomTest {
                 }
             }
         } finally {
-            println()
-            println("cartridge=${cartridge.information}")
-            println("cpuRegisters=$cpuRegisters")
-            println("ppuRegisters=$ppuRegisters")
+            println(
+                """
+                |cartridge=${cartridge.information}
+                |cpuRegisters=$cpuRegisters
+                |ppuRegisters=$ppuRegisters
+                |""".trimMargin().trimMargin()
+            )
         }
+    }
+
+    companion object {
+        private val CPURegisters.logString: String
+            get() = buildString {
+                append("${PC.toString(radix = 16).padStart(length = 4, padChar = '0')} : ")
+                append(" A:${A.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
+                append(" X:${X.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
+                append(" Y:${Y.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
+                append(" S:${S.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
+                append(" P:${P.value.toString(radix = 16).padStart(length = 2, padChar = '0')} ")
+            }
     }
 }

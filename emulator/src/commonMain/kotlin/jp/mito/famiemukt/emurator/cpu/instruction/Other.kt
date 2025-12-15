@@ -11,6 +11,6 @@ import jp.mito.famiemukt.emurator.cpu.Instruction
 //   NOP
 
 /* NOP */
-object NOP : OfficialOpCode(name = "NOP") {
+object NOP : OfficialOpCode(name = "NOP", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int = 0
 }

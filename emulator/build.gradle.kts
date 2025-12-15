@@ -1,6 +1,6 @@
 plugins {
     kotlin("multiplatform")
-    //id("dev.mokkery")
+    id("dev.mokkery")
 }
 
 kotlin {
@@ -35,10 +35,11 @@ kotlin {
             }
         }
         @Suppress("unused") val jvmMain by getting {
+            dependencies{
+            }
         }
         @Suppress("unused") val jvmTest by getting {
-            dependencies {
-                implementation("io.mockk:mockk:1.14.6")
+            dependencies{
             }
         }
     }

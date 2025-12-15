@@ -38,6 +38,7 @@ class Mapper004(
             if (irqCounter == 0 || isReloadIRQCounter) {
                 irqCounter = irqCounterTemp
                 isReloadIRQCounter = false
+//println("mapper4 irq reload. irqCounter=$irqCounter, irqCounterTemp=$irqCounterTemp") // TODO: デバッグ
             } else {
                 irqCounter--
             }
@@ -285,4 +286,6 @@ class Mapper004(
         val index = (bankNo shl 10) or (address and 0x03FF)
         return chrRom[index]
     }
+
+    override fun writeCHR(address: Int, value: UByte) = Unit
 }

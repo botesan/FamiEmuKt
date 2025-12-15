@@ -24,7 +24,6 @@ interface Mapper {
     fun calculateNameTableIndex(address: Int): Int
 
     companion object {
-        val NothingStateObserver: StateObserver = NothingStateObserver()
         fun create(
             cartridge: Cartridge,
             prgRom: UByteArray,
@@ -54,23 +53,27 @@ abstract class MapperBase(protected val cartridge: Cartridge) : Mapper {
     override val information: Cartridge.Information by cartridge::information
     override lateinit var interrupter: Interrupter
     protected open val mirroring: Mirroring = defaultMirroring(cartridge.information)
-    override val stateObserver: StateObserver = Mapper.NothingStateObserver
+    override val stateObserver: StateObserver = NothingStateObserver
 
-    override fun writePRG(address: Int, value: UByte): Unit = throw UnsupportedOperationException(
-        "PRG RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= ${value.toString(16).padStart(2, '0')}"
-    )
+    override fun writePRG(address: Int, value: UByte) {
+        val v = value.toString(16).padStart(2, '0')
+        println("PRG RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v")
+    }
 
-    override fun writeCHR(address: Int, value: UByte): Unit = throw UnsupportedOperationException(
-        "CHR RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= ${value.toString(16).padStart(2, '0')}"
-    )
+    override fun writeCHR(address: Int, value: UByte) {
+        val v = value.toString(16).padStart(2, '0')
+        println("CHR RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v")
+    }
 
-    override fun writeExt(address: Int, value: UByte): Unit = throw UnsupportedOperationException(
-        "拡張RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= ${value.toString(16).padStart(2, '0')}"
-    )
+    override fun writeExt(address: Int, value: UByte) {
+        val v = value.toString(16).padStart(2, '0')
+        println("拡張RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v")
+    }
 
-    override fun readExt(address: Int): UByte = throw UnsupportedOperationException(
-        "拡張RAMは標準で未実装 ${address.toString(16).padStart(4, '0')}"
-    )
+    override fun readExt(address: Int): UByte {
+        println("拡張RAMは標準で未実装 ${address.toString(16).padStart(4, '0')}")
+        return 0xFFu
+    }
 
     override fun writeBackup(address: Int, value: UByte) =
         cartridge.backupRAM.write(index = (address and 0x1FFF), value = value)

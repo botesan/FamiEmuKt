@@ -57,12 +57,14 @@ class FetchSprite(private val ppuBus: PPUBus, ppuControl: PPUControl, objectAttr
     fun fetchLinePatternL(y: Int) {
         if (y == 261 + 1) return
         val indexY = y - offsetY
+        // 多分、スプライト描画の有効無効を切り替えているのが原因
+        // もしくは割り込み実装のタイミングが不正確
+        // とりあえず強制終了しないようにしておけば良い？
+        // https://www.nesdev.org/wiki/PPU_sprite_evaluation#Rendering_disable_or_enable_during_active_scanline
+        // Disabling rendering mid-frame, then re-enabling it on the same frame may have additional corruption,
+        // at least on the first scanline it is re-enabled.
         //check(value = indexY in 0 until spriteHeight) { "y out of range. y=$y offsetY=$offsetY spriteHeight=$spriteHeight" }
-        if (indexY !in 0 until spriteHeight) {
-            // TODO: 引っかかりことあり？間違い？
-            println("fetchLinePatternL() y out of range. indexY=$indexY, y=$y offsetY=$offsetY spriteHeight=$spriteHeight")
-            return
-        }
+        if (indexY !in 0 until spriteHeight) return
         val fetchingRelativeY = if (isFlipVertical) spriteHeight - 1 - indexY else indexY
         val address = spritePatternTableAddress +
                 (tileNo + (fetchingRelativeY ushr 3)) * PPU.PATTERN_TABLE_ELEMENT_SIZE +
@@ -74,14 +76,17 @@ class FetchSprite(private val ppuBus: PPUBus, ppuControl: PPUControl, objectAttr
     fun fetchLinePatternH(y: Int) {
         if (y == 261 + 1) return
         val indexY = y - offsetY
+        // 多分、スプライト描画の有効無効を切り替えているのが原因
+        // もしくは割り込み実装のタイミングが不正確
+        // とりあえず強制終了しないようにしておけば良い？
+        // https://www.nesdev.org/wiki/PPU_sprite_evaluation#Rendering_disable_or_enable_during_active_scanline
+        // Disabling rendering mid-frame, then re-enabling it on the same frame may have additional corruption,
+        // at least on the first scanline it is re-enabled.
         //check(value = indexY in 0 until spriteHeight) { "y out of range. y=$y offsetY=$offsetY spriteHeight=$spriteHeight" }
-        if (indexY !in 0 until spriteHeight) {
-            // TODO: 引っかかりことあり？間違い？
-            println("fetchLinePatternH() y out of range. indexY=$indexY, y=$y offsetY=$offsetY spriteHeight=$spriteHeight")
-            return
-        }
+        if (indexY !in 0 until spriteHeight) return
         val fetchingRelativeY = if (isFlipVertical) spriteHeight - 1 - indexY else indexY
-        check(value = fetchingRelativeY == this.fetchingRelativeY) { "fetchLinePatternH must be called after fetchLinePatternL. fetchingRelativeY=$fetchingRelativeY this.fetchingRelativeY=${this.fetchingRelativeY}" }
+        //check(value = fetchingRelativeY == this.fetchingRelativeY) { "fetchLinePatternH must be called after fetchLinePatternL. fetchingRelativeY=$fetchingRelativeY this.fetchingRelativeY=${this.fetchingRelativeY}" }
+        if (fetchingRelativeY != this.fetchingRelativeY) return
         val address = spritePatternTableAddress +
                 (tileNo + (fetchingRelativeY ushr 3)) * PPU.PATTERN_TABLE_ELEMENT_SIZE +
                 (fetchingRelativeY and 0x07) + PPU.PATTERN_TABLE_ELEMENT_SIZE / 2

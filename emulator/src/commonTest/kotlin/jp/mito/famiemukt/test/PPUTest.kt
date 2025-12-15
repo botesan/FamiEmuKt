@@ -1,9 +1,12 @@
-package jp.mito.famiemukt.test.cpu
+package jp.mito.famiemukt.test
 
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
-import jp.mito.famiemukt.emurator.cartridge.StateObserverAdapter
+import dev.mokkery.answering.returns
+import dev.mokkery.every
+import dev.mokkery.mock
+import dev.mokkery.verify
+import dev.mokkery.verify.VerifyMode.Companion.exactly
+import jp.mito.famiemukt.emurator.cartridge.A12
+import jp.mito.famiemukt.emurator.cartridge.NothingStateObserver
 import jp.mito.famiemukt.emurator.cartridge.mapper.Mapper
 import jp.mito.famiemukt.emurator.cartridge.mapper.Mapper000
 import jp.mito.famiemukt.emurator.cpu.Interrupter
@@ -18,17 +21,18 @@ import kotlin.test.*
 class PPUTest {
     @Test
     fun testConstructor() {
-        val mapper = mockk<Mapper>()
+        val mapper = mock<Mapper>()
+        val interrupter = mock<Interrupter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
-        val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         assertNotNull(ppu)
     }
@@ -36,17 +40,18 @@ class PPUTest {
     // https://www.nesdev.org/wiki/PPU_scrolling#Summary
     @Test
     fun testWrite2InternalRegister() {
-        val mapper = mockk<Mapper>()
+        val mapper = mock<Mapper>()
+        val interrupter = mock<Interrupter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
-        val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // write Control -> t
         ppu.writePPUControl(value = 0b0000_0011U)
@@ -76,8 +81,8 @@ class PPUTest {
     @Test
     fun testReadBufferMirrorHorizontal() {
         val mapper = Mapper000(
-            cartridge = mockk {
-                every { information } returns mockk {
+            cartridge = mock {
+                every { information } returns mock {
                     every { chrRom8Units } returns 0
                     every { ignoreMirroring } returns false
                     every { mirroringVertical } returns false
@@ -86,16 +91,17 @@ class PPUTest {
             prgRom = UByteArray(size = 0),
             chrRom = UByteArray(size = 0),
         )
+        val interrupter = mock<Interrupter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
-        val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // データ
         val data = (0x2000u..0x3effu).map { ((it + (it shr 8)) * 7u + 11u).toUByte() }
@@ -137,8 +143,8 @@ class PPUTest {
     @Test
     fun testReadBufferMirrorVertical() {
         val mapper = Mapper000(
-            cartridge = mockk {
-                every { information } returns mockk {
+            cartridge = mock {
+                every { information } returns mock {
                     every { chrRom8Units } returns 0
                     every { ignoreMirroring } returns false
                     every { mirroringVertical } returns true
@@ -147,16 +153,17 @@ class PPUTest {
             prgRom = UByteArray(size = 0),
             chrRom = UByteArray(size = 0),
         )
+        val interrupter = mock<Interrupter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
-        val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // データ
         val data = (0x2000u..0x3effu).map { ((it + (it shr 8)) * 7u + 11u).toUByte() }
@@ -198,8 +205,8 @@ class PPUTest {
     @Test
     fun testReadBufferMirrorFourScreen() {
         val mapper = Mapper000(
-            cartridge = mockk {
-                every { information } returns mockk {
+            cartridge = mock {
+                every { information } returns mock {
                     every { chrRom8Units } returns 0
                     every { ignoreMirroring } returns true
                     every { mirroringVertical } returns false
@@ -208,16 +215,17 @@ class PPUTest {
             prgRom = UByteArray(size = 0),
             chrRom = UByteArray(size = 0),
         )
+        val interrupter = mock<Interrupter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
-        val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // データ
         val data = (0x2000u..0x3effu).map { ((it + (it shr 8)) * 7u + 11u).toUByte() }
@@ -262,8 +270,8 @@ class PPUTest {
     @Test
     fun testWritePalletTable() {
         val mapper = Mapper000(
-            cartridge = mockk {
-                every { information } returns mockk {
+            cartridge = mock {
+                every { information } returns mock {
                     every { chrRom8Units } returns 0
                     every { ignoreMirroring } returns false
                     every { mirroringVertical } returns false
@@ -272,16 +280,17 @@ class PPUTest {
             prgRom = UByteArray(size = 0),
             chrRom = UByteArray(size = 0),
         )
+        val interrupter = mock<Interrupter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
-        val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // ミラーリングもチェック
         ubyteArrayOf(0x00u, 0x20u, 0x40u, 0x60u, 0x80u, 0xa0u, 0xc0u, 0xe0u)
@@ -333,8 +342,8 @@ class PPUTest {
     fun testReadChrRom() {
         val chrRom = UByteArray(size = 0x2000) { (it + (it shr 8)).toUByte() }
         val mapper = Mapper000(
-            cartridge = mockk {
-                every { information } returns mockk {
+            cartridge = mock {
+                every { information } returns mock {
                     every { chrRom8Units } returns chrRom.size / 8 / 1024
                     every { ignoreMirroring } returns false
                     every { mirroringVertical } returns false
@@ -343,16 +352,17 @@ class PPUTest {
             prgRom = UByteArray(size = 0),
             chrRom = chrRom,
         )
+        val interrupter = mock<Interrupter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
-        val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // 読み込み準備
         ppu.readPPUStatus()
@@ -368,8 +378,8 @@ class PPUTest {
     @Test
     fun testAccessChrRam() {
         val mapper = Mapper000(
-            cartridge = mockk {
-                every { information } returns mockk {
+            cartridge = mock {
+                every { information } returns mock {
                     every { chrRom8Units } returns 0
                     every { ignoreMirroring } returns false
                     every { mirroringVertical } returns false
@@ -378,16 +388,17 @@ class PPUTest {
             prgRom = UByteArray(size = 0),
             chrRom = UByteArray(size = 0),
         )
+        val interrupter = mock<Interrupter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
         val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
-        val stateObserver = mockk<StateObserverAdapter>()
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // 書き込み
         ppu.readPPUStatus()
@@ -410,8 +421,8 @@ class PPUTest {
     @Test
     fun testInterruptNMI() {
         val mapper = Mapper000(
-            cartridge = mockk {
-                every { information } returns mockk {
+            cartridge = mock {
+                every { information } returns mock {
                     every { chrRom8Units } returns 0
                     every { ignoreMirroring } returns false
                     every { mirroringVertical } returns false
@@ -420,63 +431,64 @@ class PPUTest {
             prgRom = UByteArray(size = 0),
             chrRom = UByteArray(size = 0),
         )
-        val videoRAM = VideoRAM()
-        val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
+        val interrupter = mock<Interrupter>()
         every { interrupter.requestNMI() } returns Unit
         every { interrupter.requestNMI(levelLow = false) } returns Unit
-        val stateObserver = mockk<StateObserverAdapter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
+        val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
+        val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // NMIコントロール設定
         ppu.writePPUControl(value = 0x80u)
         // NMI割り込み直前まで実行してチェック
         repeat(times = 341 * (240 + 1) + 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 0) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         assertFalse(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // NMI割り込みまで実行してチェック
         repeat(times = 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 1) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 1)) { interrupter.requestNMI() }
         assertTrue(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // VBlankクリア直前まで実行してチェック
         repeat(times = 341 * 20 - 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 1) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         assertTrue(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // VBlankクリアまで実行してチェック
         repeat(times = 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 1) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         assertFalse(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // NMIコントロールクリア
         ppu.writePPUControl(value = 0x00u)
         // NMI割り込み直前まで実行してチェック
         repeat(times = 341 - 2 + 341 * (240 + 1) + 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 1) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         assertFalse(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // NMI割り込み（フラグのみ）まで実行してチェック
         repeat(times = 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 1) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         assertTrue(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // NMIコントロール設定してNMI割り込み実行チェック
         ppu.writePPUControl(value = 0x80u)
-        verify(exactly = 2) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 1)) { interrupter.requestNMI() }
         assertTrue(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
         // ステータス読み込んでフラグ解除チェック
         ppu.readPPUStatus()
-        verify(exactly = 2) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         assertFalse(actual = ppuRegisters.ppuStatus.isVerticalBlankHasStarted)
     }
 
     // https://www.nesdev.org/wiki/PPU_frame_timing#Even/Odd_Frames
     @Test
-    fun testEvenOddFrameCycle() {
+    fun testEvenOddFrameCycle1() {
         val mapper = Mapper000(
-            cartridge = mockk {
-                every { information } returns mockk {
+            cartridge = mock {
+                every { information } returns mock {
                     every { chrRom8Units } returns 0
                     every { ignoreMirroring } returns false
                     every { mirroringVertical } returns false
@@ -485,44 +497,136 @@ class PPUTest {
             prgRom = UByteArray(size = 0),
             chrRom = UByteArray(size = 0),
         )
-        val videoRAM = VideoRAM()
-        val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
-        val ppuRegisters = PPURegisters()
-        val interrupter = mockk<Interrupter>()
+        val interrupter = mock<Interrupter>()
         every { interrupter.requestNMI() } returns Unit
-        val stateObserver = mockk<StateObserverAdapter>()
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
+        val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
+        val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
             ppuBus = ppuBus,
             interrupter = interrupter,
-            stateObserver = stateObserver,
+            a12 = a12,
         )
         // 偶数フレーム／スプライト表示無し／便宜上最初のフレームが偶数とする
         ppu.writePPUControl(value = 0x80u)
         ppu.writePPUMask(value = 0x00u)
         repeat(times = 341 * (240 + 1) + 1) { ppu._executePPUCycleStep() }
         assertFalse(actual = ppu._isOddFrame)
-        verify(exactly = 0) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         repeat(times = 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 1) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 1)) { interrupter.requestNMI() }
         // 奇数フレーム／スプライト表示無し
         repeat(times = 341 * 262 - 1) { ppu._executePPUCycleStep() }
         assertTrue(actual = ppu._isOddFrame)
-        verify(exactly = 1) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         repeat(times = 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 2) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 1)) { interrupter.requestNMI() }
         // 偶数フレーム／スプライト表示あり／BG表示はmockkで時間が掛かってしまうためやめる
         ppu.writePPUMask(value = 0x10u)
         repeat(times = 341 * 262 - 2) { ppu._executePPUCycleStep() }
         assertFalse(actual = ppu._isOddFrame)
-        verify(exactly = 2) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         repeat(times = 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 3) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 1)) { interrupter.requestNMI() }
         // 奇数フレーム／スプライト表示あり（１サイクル分少なくなる）
         repeat(times = 341 * 262 - 1) { ppu._executePPUCycleStep() }
         assertTrue(actual = ppu._isOddFrame)
-        verify(exactly = 3) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 0)) { interrupter.requestNMI() }
         repeat(times = 1) { ppu._executePPUCycleStep() }
-        verify(exactly = 4) { interrupter.requestNMI() }
+        verify(mode = exactly(n = 1)) { interrupter.requestNMI() }
+    }
+
+    // 主に 10-even_odd_timing のための確認
+    @Test
+    fun testEvenOddFrameCycle2() {
+        val mapper = Mapper000(
+            cartridge = mock {
+                every { information } returns mock {
+                    every { chrRom8Units } returns 0
+                    every { ignoreMirroring } returns false
+                    every { mirroringVertical } returns false
+                }
+            },
+            prgRom = UByteArray(size = 0),
+            chrRom = UByteArray(size = 0),
+        )
+        val interrupter = mock<Interrupter>()
+        every { interrupter.requestNMI() } returns Unit
+        every { interrupter.requestNMI(levelLow = false) } returns Unit
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
+        val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
+        val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
+        val ppu = PPU(
+            ppuRegisters = ppuRegisters,
+            ppuBus = ppuBus,
+            interrupter = interrupter,
+            a12 = a12,
+        )
+        // スプライト表示無し
+        ppu.writePPUControl(value = 0x80u)
+        ppu.writePPUMask(value = 0x00u)
+        // 偶数フレーム／最後の手前でスプライトON／便宜上最初のフレームが偶数とする
+        repeat(times = 341 * 262 - 3) { ppu._executePPUCycleStep() }
+        assertEquals(expected = 338, actual = ppu._ppuX)
+        assertEquals(expected = 261, actual = ppu._ppuY)
+        assertFalse(actual = ppu._isOddFrame, message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}")
+        ppu.writePPUMask(value = 0x10u)
+        repeat(times = 2) { ppu._executePPUCycleStep() }
+        assertEquals(expected = 340, actual = ppu._ppuX)
+        assertEquals(expected = 261, actual = ppu._ppuY)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
+        // 奇数フレーム／スプライト表示中／VBlankフラグチェック
+        assertEquals(expected = 0, actual = ppu._ppuX)
+        assertEquals(expected = 0, actual = ppu._ppuY)
+        assertTrue(actual = ppu._isOddFrame, message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}")
+        repeat(times = 341 * (240 + 1)) { ppu._executePPUCycleStep() }
+        assertEquals(expected = 0, actual = ppu._ppuX)
+        assertEquals(expected = 241, actual = ppu._ppuY)
+        assertEquals(
+            expected = 0x00.toUByte(),
+            actual = ppu.readPPUStatus() and 0x80u,
+            message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}",
+        )
+        repeat(times = 2) { ppu._executePPUCycleStep() }
+        assertEquals(expected = 2, actual = ppu._ppuX)
+        assertEquals(expected = 241, actual = ppu._ppuY)
+        assertEquals(
+            expected = 0x80.toUByte(),
+            actual = ppu.readPPUStatus() and 0x80u,
+            message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}",
+        )
+        // 奇数フレーム／スプライトOFF
+        ppu.writePPUMask(value = 0x00u)
+        // 奇数フレーム／最後の後でスプライトON
+        repeat(times = 341 * 20 + (341 - 2) - 1) { ppu._executePPUCycleStep() }
+        assertEquals(expected = 340, actual = ppu._ppuX)
+        assertEquals(expected = 261, actual = ppu._ppuY)
+        ppu.writePPUMask(value = 0x10u)
+        repeat(times = 1) { ppu._executePPUCycleStep() }
+        // 偶数フレーム／スプライト表示中／VBlankフラグチェック
+        assertEquals(expected = 0, actual = ppu._ppuX)
+        assertEquals(expected = 0, actual = ppu._ppuY)
+        assertFalse(actual = ppu._isOddFrame, message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}")
+        repeat(times = 341 * (240 + 1)) { ppu._executePPUCycleStep() }
+        assertEquals(expected = 0, actual = ppu._ppuX)
+        assertEquals(expected = 241, actual = ppu._ppuY)
+        assertEquals(
+            expected = 0x00.toUByte(),
+            actual = ppu.readPPUStatus() and 0x80u,
+            message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}",
+        )
+        repeat(times = 2) { ppu._executePPUCycleStep() }
+        assertEquals(expected = 2, actual = ppu._ppuX)
+        assertEquals(expected = 241, actual = ppu._ppuY)
+        assertEquals(
+            expected = 0x80.toUByte(),
+            actual = ppu.readPPUStatus() and 0x80u,
+            message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}",
+        )
     }
 }

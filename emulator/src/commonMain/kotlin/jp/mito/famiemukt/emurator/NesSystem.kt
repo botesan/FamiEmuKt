@@ -2,6 +2,7 @@ package jp.mito.famiemukt.emurator
 
 import jp.mito.famiemukt.emurator.apu.APU
 import jp.mito.famiemukt.emurator.apu.AudioSampleNotifier
+import jp.mito.famiemukt.emurator.cartridge.A12
 import jp.mito.famiemukt.emurator.cartridge.Cartridge
 import jp.mito.famiemukt.emurator.cpu.*
 import jp.mito.famiemukt.emurator.dma.DMA
@@ -26,13 +27,14 @@ class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, 
     val _videoRAM: VideoRAM get() = videoRAM
 
     private val videoRAM = VideoRAM()
+    private val a12 = A12(stateObserver = cartridge.mapper.stateObserver)
     private val ppuBus = PPUBus(mapper = cartridge.mapper, videoRAM = videoRAM)
-    private val ppuRegisters = PPURegisters()
+    private val ppuRegisters = PPURegisters(a12 = a12)
     private val ppu = PPU(
         ppuRegisters = ppuRegisters,
         ppuBus = ppuBus,
         interrupter = interrupter,
-        stateObserver = cartridge.mapper.stateObserver,
+        a12 = a12,
     )
 
     private val ram = RAM()

@@ -55,7 +55,4 @@ class Mapper093(
     }
 
     override fun readCHR(address: Int): UByte = chrRom[address]
-
-    // FantasyZoneで書き込みあり／デバッグとかで使用したいた？
-    override fun writeExt(address: Int, value: UByte) = Unit
 }

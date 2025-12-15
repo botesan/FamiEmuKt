@@ -1,9 +1,9 @@
 import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
 
 plugins {
-    kotlin("multiplatform") version "2.2.21" apply false
-    kotlin("jvm") version "2.2.21" apply false
-    //id("dev.mokkery") version "2.10.2" apply false
+    kotlin("multiplatform") version "2.3.0" apply false
+    kotlin("jvm") version "2.3.0" apply false
+    id("dev.mokkery") version "3.1.1" apply false
     id("com.github.johnrengelman.shadow") version "8.1.1" apply false
     id("com.github.ben-manes.versions") version "0.53.0"
 }

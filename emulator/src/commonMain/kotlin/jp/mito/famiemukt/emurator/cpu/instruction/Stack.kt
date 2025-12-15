@@ -14,7 +14,7 @@ import jp.mito.famiemukt.emurator.cpu.logic.push
 //   PHA PHP PLA PLP
 
 /* PHA Aをスタックにプッシュダウンします。[0.0.0.0.0.0.0.0] */
-object PHA : OfficialOpCode(name = "PHA") {
+object PHA : OfficialOpCode(name = "PHA", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         push(value = registers.A, bus, registers)
         return 0
@@ -23,7 +23,7 @@ object PHA : OfficialOpCode(name = "PHA") {
 
 /* PHP Pをスタックにプッシュダウンします。[0.0.0.0.0.0.0.0]
    The status register will be pushed with the break flag and bit 5 set to 1. */
-object PHP : OfficialOpCode(name = "PHP") {
+object PHP : OfficialOpCode(name = "PHP", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         // break flagをセット、bit 5 は予約で 1 セット済み（のはず）
         val value = registers.P.copy().apply { B = true }.value
@@ -33,7 +33,7 @@ object PHP : OfficialOpCode(name = "PHP") {
 }
 
 /* PLA スタックからAにポップアップします。[N.0.0.0.0.0.Z.0] */
-object PLA : OfficialOpCode(name = "PLA") {
+object PLA : OfficialOpCode(name = "PLA", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val result = pop(bus, registers)
         registers.A = result
@@ -45,7 +45,7 @@ object PLA : OfficialOpCode(name = "PLA") {
 
 /* PLP スタックからPにポップアップします。[N.V.R.B.D.I.Z.C]
    The status register will be pulled with the break flag and bit 5 ignored. */
-object PLP : OfficialOpCode(name = "PLP") {
+object PLP : OfficialOpCode(name = "PLP", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         // break flag と bit 5 を無視（実質break flagを変更前で上書き）
         val value = pop(bus, registers)

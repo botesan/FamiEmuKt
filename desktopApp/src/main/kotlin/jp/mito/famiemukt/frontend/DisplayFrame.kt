@@ -96,8 +96,8 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
                 }
             }
         } catch (th: Throwable) {
-            println(system?.debugInfo(nest = 0))
             th.printStackTrace()
+            println(system?.debugInfo(nest = 0))
             exitProcess(status = -1)
         }
     }
@@ -136,7 +136,7 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
                     KeyEvent.VK_X -> system?.isPad1B = false
                     KeyEvent.VK_SPACE -> system?.isPad1Select = false
                     KeyEvent.VK_ENTER -> system?.isPad1Start = false
-                    KeyEvent.VK_D -> print(system?.debugInfo(nest = 0))
+                    KeyEvent.VK_D -> println(system?.debugInfo(nest = 0))
                     KeyEvent.VK_R -> {
                         val system = system
                         if (system != null) {

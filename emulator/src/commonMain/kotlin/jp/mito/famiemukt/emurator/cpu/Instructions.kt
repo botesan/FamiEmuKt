@@ -268,7 +268,7 @@ val Instructions: List<Instruction> = listOf(
 
     /* 0xe0 */inst(CPX, Immediate, 2),
     /* 0xe1 */inst(SBC, IndirectX, 6),
-    /* 0xe2 */inst(NOPs, Immediate, 3), // 非公式コマンド
+    /* 0xe2 */inst(NOPs, Immediate, 2), // 非公式コマンド
     /* 0xe3 */inst(ISB, IndirectX, 8), // 非公式コマンド (=ISC)
     /* 0xe4 */inst(CPX, ZeroPage, 3),
     /* 0xe5 */inst(SBC, ZeroPage, 3),
