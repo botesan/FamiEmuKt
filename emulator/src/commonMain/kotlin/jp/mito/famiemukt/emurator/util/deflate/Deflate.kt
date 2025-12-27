@@ -1,5 +1,6 @@
 package jp.mito.famiemukt.emurator.util.deflate
 
+import co.touchlab.kermit.Logger
 import kotlinx.io.Sink
 import kotlinx.io.Source
 import kotlinx.io.readByteArray
@@ -15,7 +16,7 @@ fun Deflate(optimized: Boolean = true): Deflate = if (optimized) OptimizedDeflat
 
 private const val DEBUG_LOG = !false
 private inline fun debugLog(message: () -> String) {
-    if (DEBUG_LOG) println(message())
+    if (DEBUG_LOG) Logger.d { message() }
 }
 
 // (HCLEN + 4) x 3 bits: code lengths for the code length alphabet given just above, in the order:
@@ -446,18 +447,40 @@ private class OptimizedDeflateImpl : Deflate {
                 while (true) {
                     val valueLiteral = huffmanLiteral.read(from = bitReader)
                     debugLog { "valueLiteral=$valueLiteral" }
-                    if (valueLiteral < 256) {
-                        slidingWindow.write(byte = valueLiteral.toByte())
-                    } else if (valueLiteral == 256) {
+                    if (valueLiteral == 256) {
                         break
+                    } else if (valueLiteral < 256) {
+                        slidingWindow.write(byte = valueLiteral.toByte())
                     } else {
-                        val lengthIndex = valueLiteral - 257
-                        val length = LENGTH_BASE[lengthIndex] +
-                                bitReader.readBits(count = LENGTH_EXTRA_BITS[lengthIndex])
+                        val length = when (valueLiteral) {
+                            in 257..264 -> (valueLiteral - 257) + 3
+                            in 265..268 -> ((valueLiteral - 265) shl 1) + 11 + bitReader.readBits(count = 1)
+                            in 269..272 -> ((valueLiteral - 269) shl 2) + 19 + bitReader.readBits(count = 2)
+                            in 273..276 -> ((valueLiteral - 273) shl 3) + 35 + bitReader.readBits(count = 3)
+                            in 277..280 -> ((valueLiteral - 277) shl 4) + 67 + bitReader.readBits(count = 4)
+                            in 281..284 -> ((valueLiteral - 281) shl 5) + 131 + bitReader.readBits(count = 5)
+                            285 -> 258
+                            else -> error("Illegal valueLiteral=$valueLiteral")
+                        }
                         val valueDistance = huffmanDistance.read(from = bitReader)
                         debugLog { "valueDistance=$valueDistance" }
-                        val distance = DISTANCE_BASE[valueDistance] +
-                                bitReader.readBits(count = DISTANCE_EXTRA_BITS[valueDistance])
+                        val distance = when (valueDistance) {
+                            in 0..3 -> valueDistance + 1
+                            4, 5 -> ((valueDistance - 4) shl 1) + 5 + bitReader.readBits(count = 1)
+                            6, 7 -> ((valueDistance - 6) shl 2) + 9 + bitReader.readBits(count = 2)
+                            8, 9 -> ((valueDistance - 8) shl 3) + 17 + bitReader.readBits(count = 3)
+                            10, 11 -> ((valueDistance - 10) shl 4) + 33 + bitReader.readBits(count = 4)
+                            12, 13 -> ((valueDistance - 12) shl 5) + 65 + bitReader.readBits(count = 5)
+                            14, 15 -> ((valueDistance - 14) shl 6) + 129 + bitReader.readBits(count = 6)
+                            16, 17 -> ((valueDistance - 16) shl 7) + 257 + bitReader.readBits(count = 7)
+                            18, 19 -> ((valueDistance - 18) shl 8) + 513 + bitReader.readBits(count = 8)
+                            20, 21 -> ((valueDistance - 20) shl 9) + 1025 + bitReader.readBits(count = 9)
+                            22, 23 -> ((valueDistance - 22) shl 10) + 2049 + bitReader.readBits(count = 10)
+                            24, 25 -> ((valueDistance - 24) shl 11) + 4097 + bitReader.readBits(count = 11)
+                            26, 27 -> ((valueDistance - 26) shl 12) + 8193 + bitReader.readBits(count = 12)
+                            28, 29 -> ((valueDistance - 28) shl 13) + 16385 + bitReader.readBits(count = 13)
+                            else -> error("Illegal valueDistance=$valueDistance")
+                        }
                         debugLog { "length=$length, distance=$distance" }
                         slidingWindow.slidingCopy(length = length, distance = distance)
                     }

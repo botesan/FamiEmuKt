@@ -29,68 +29,72 @@ data class CPURegisters(
 data class ProcessorStatus(
     // 電源投入時の状態（Iのみチェックあり）
     // https://www.nesdev.org/wiki/CPU_power_up_state
-    var value: UByte = BIT_MASK_2,
+    var value: UByte = BIT_MASK_2.toUByte(),
 ) {
     /** Carry */
     var C: Boolean
-        get() = (value and BIT_MASK_0) != 0.toUByte()
+        get() = value.isBit(bitMask = BIT_MASK_0)
         set(value) {
-            this.value = (if (value) this.value or BIT_MASK_0 else this.value and BIT_MASK_0.inv())
+            this.value = this.value.applyBit(bitMask = BIT_MASK_0, value = value)
         }
 
     /** Zero */
     var Z: Boolean
-        get() = (value and BIT_MASK_1) != 0.toUByte()
+        get() = value.isBit(bitMask = BIT_MASK_1)
         set(value) {
-            this.value = (if (value) this.value or BIT_MASK_1 else this.value and BIT_MASK_1.inv())
+            this.value = this.value.applyBit(bitMask = BIT_MASK_1, value = value)
         }
 
     /** Interrupt Disable */
     var I: Boolean
-        get() = (value and BIT_MASK_2) != 0.toUByte()
+        get() = value.isBit(bitMask = BIT_MASK_2)
         set(value) {
-            this.value = (if (value) this.value or BIT_MASK_2 else this.value and BIT_MASK_2.inv())
+            this.value = this.value.applyBit(bitMask = BIT_MASK_2, value = value)
         }
 
     /** Decimal（未使用） */
     @Suppress("MemberVisibilityCanBePrivate")
     var D: Boolean
-        get() = (value and BIT_MASK_3) != 0.toUByte()
+        get() = value.isBit(bitMask = BIT_MASK_3)
         set(value) {
-            this.value = (if (value) this.value or BIT_MASK_3 else this.value and BIT_MASK_3.inv())
+            this.value = this.value.applyBit(bitMask = BIT_MASK_3, value = value)
         }
 
     /** Break */
     var B: Boolean
-        get() = (value and BIT_MASK_4) != 0.toUByte()
+        get() = value.isBit(bitMask = BIT_MASK_4)
         set(value) {
-            this.value = (if (value) this.value or BIT_MASK_4 else this.value and BIT_MASK_4.inv())
+            this.value = this.value.applyBit(bitMask = BIT_MASK_4, value = value)
         }
 
     /** Reserved（常にtrue） */
     @Suppress("MemberVisibilityCanBePrivate")
     var R: Boolean
-        get() = (value and BIT_MASK_5) != 0.toUByte()
+        get() = value.isBit(bitMask = BIT_MASK_5)
         private set(value) {
-            this.value = (if (value) this.value or BIT_MASK_5 else this.value and BIT_MASK_5.inv())
+            this.value = this.value.applyBit(bitMask = BIT_MASK_5, value = value)
         }
 
     /** Overflow */
     var V: Boolean
-        get() = (value and BIT_MASK_6) != 0.toUByte()
+        get() = value.isBit(bitMask = BIT_MASK_6)
         set(value) {
-            this.value = (if (value) this.value or BIT_MASK_6 else this.value and BIT_MASK_6.inv())
+            this.value = this.value.applyBit(bitMask = BIT_MASK_6, value = value)
         }
 
     /** Negative */
     var N: Boolean
-        get() = (value and BIT_MASK_7) != 0.toUByte()
+        get() = value.isBit(bitMask = BIT_MASK_7)
         set(value) {
-            this.value = (if (value) this.value or BIT_MASK_7 else this.value and BIT_MASK_7.inv())
+            this.value = this.value.applyBit(bitMask = BIT_MASK_7, value = value)
         }
 
-    init {
+    fun init() {
         // 固定値を設定
         R = true
+    }
+
+    init {
+        init()
     }
 }

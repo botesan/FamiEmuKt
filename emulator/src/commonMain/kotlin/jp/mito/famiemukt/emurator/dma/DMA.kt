@@ -113,10 +113,14 @@ class DMA(private val ppu: PPU, private val ppuRegisters: PPURegisters) {
         copyObjectAttributeMemoryRemainCount = 257
     }
 
+    fun interface CopyToDMC {
+        operator fun invoke(value: UByte)
+    }
+
     // https://www.nesdev.org/wiki/APU_DMC#Memory_reader
     // https://www.nesdev.org/wiki/DMA#DMC_DMA
     // https://www.nesdev.org/wiki/DMA#DMC_DMA_during_OAM_DMA
-    private var copyToDMC: ((UByte) -> Unit)? by Delegates.observable(initialValue = null) { _, oldValue, newValue ->
+    private var copyToDMC: CopyToDMC? by Delegates.observable(initialValue = null) { _, oldValue, newValue ->
         if (oldValue != null && newValue != null) {
             error("copyToDMC: Illegal set new value. Can not duplicate request.")
         }
@@ -125,7 +129,7 @@ class DMA(private val ppu: PPU, private val ppuRegisters: PPURegisters) {
     private var isCopyDMCReload: Boolean = false
     private var copyDMCRemainCount: Int = -1
 
-    fun copyDMCSampleBuffer(address: Int, isReload: Boolean, copyTo: (UByte) -> Unit) {
+    fun copyDMCSampleBuffer(address: Int, isReload: Boolean, copyTo: CopyToDMC) {
         copyToDMC = copyTo
         copyDMCAddress = address
         isCopyDMCReload = isReload

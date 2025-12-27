@@ -73,6 +73,11 @@ class CPUBusImpl(
 
     override fun readMemIO(address: Int): UByte {
         return when (address) {
+            // ホットパス最適化（よくアクセスする領域を先に判定）
+            // $8000-$BFFF	プログラムROM LOW
+            // $C000-$FFFF	プログラムROM HIGH
+            in 0x8000..0xFFFF -> mapper.readPRG(address = address)
+            // $0000–$07FF	$0800	2 KB internal RAM
             in 0x0000..0x1FFF -> ram.read(address = address)
             // $2000–$2007	$0008	NES PPU registers
             // https://www.nesdev.org/wiki/PPU_registers
@@ -112,9 +117,6 @@ class CPUBusImpl(
             in 0x4020..0x5FFF -> mapper.readExt(address = address)
             // $6000-$7FFF	バッテリーバックアップRAM
             in 0x6000..0x7FFF -> mapper.readBackup(address = address)
-            // $8000-$BFFF	プログラムROM LOW
-            // $C000-$FFFF	プログラムROM HIGH
-            in 0x8000..0xFFFF -> mapper.readPRG(address = address)
             // 範囲外
             else -> error("Illegal read address. $address(${address.toString(radix = 16)}")
         }

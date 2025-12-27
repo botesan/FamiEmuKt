@@ -1,16 +1,27 @@
 package jp.mito.famiemukt.test
 
+import co.touchlab.kermit.CommonWriter
+import co.touchlab.kermit.Logger
+import co.touchlab.kermit.Severity
+import com.goncalossilva.resources.Resource
 import jp.mito.famiemukt.emurator.NesSystem
 import jp.mito.famiemukt.emurator.apu.AudioSampleNotifier
 import jp.mito.famiemukt.emurator.cartridge.BackupRAM
 import jp.mito.famiemukt.emurator.cartridge.Cartridge
 import jp.mito.famiemukt.emurator.util.VisibleForTesting
+import kotlinx.io.bytestring.ByteString
+import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertNotNull
 import kotlin.test.fail
 
 @OptIn(ExperimentalUnsignedTypes::class, VisibleForTesting::class)
 class NesTestRomsTest {
+    @BeforeTest
+    fun setup() {
+        Logger.setLogWriters(CommonWriter())
+        Logger.setMinSeverity(Severity.Info)
+    }
+
     @Test
     fun testInstrIncludeUnofficial_02() = checkRom("nes-test-roms/instr_test-v5/rom_singles/02-implied.nes")
 
@@ -267,7 +278,7 @@ class NesTestRomsTest {
 
     private fun checkRom(file: String) {
         val backupRAM = BackupRAM()
-        val iNesData = assertNotNull(actual = javaClass.classLoader.getResource(file)).readBytes()
+        val iNesData = Resource(path = file).readBytes()
         val cartridge = Cartridge(backupRAM = backupRAM, iNesData = iNesData)
         val audioSampleNotifier = object : AudioSampleNotifier {
             override fun notifySample(value: UByte) = Unit
@@ -289,7 +300,7 @@ class NesTestRomsTest {
                     }
                     if (resetRequestedCount > 0 && count - resetRequestedCount > 20) {
                         resetRequestedCount = -1L
-                        println("system.reset")
+                        Logger.d { "system.reset" }
                         system.reset()
                     }
                 }
@@ -301,7 +312,8 @@ class NesTestRomsTest {
                 val key2 = data[2].toString(16).padStart(2, '0')
                 val key3 = data[3].toString(16).padStart(2, '0')
                 val message = data.drop(n = 4).takeWhile { it != 0.toUByte() }
-                    .toUByteArray().asByteArray().toString(Charsets.UTF_8)
+                    .toUByteArray().asByteArray().decodeToString()
+                ByteString()
                 fail(
                     message = """
                         |タイムアウト ${count / 60} [sec]？
@@ -327,17 +339,17 @@ class NesTestRomsTest {
             0x80.toUByte() -> FinishResult.Continue
             0x81.toUByte() -> FinishResult.ResetRequest
             0x00.toUByte() -> {
-                println(
+                Logger.d {
                     data.drop(n = 4).takeWhile { it != 0.toUByte() }
-                        .toUByteArray().asByteArray().toString(Charsets.UTF_8)
-                )
+                        .toUByteArray().asByteArray().decodeToString()
+                }
                 FinishResult.Finish
             }
 
             else -> {
                 val code = data[0].toString(16).padStart(2, '0')
                 val message = data.drop(n = 4).takeWhile { it != 0.toUByte() }
-                    .toUByteArray().asByteArray().toString(Charsets.UTF_8)
+                    .toUByteArray().asByteArray().decodeToString()
                 fail(
                     message = """
                         |code=$code
@@ -353,7 +365,7 @@ class NesTestRomsTest {
 
     private fun checkRomDisplay(file: String) {
         val backupRAM = BackupRAM()
-        val iNesData = assertNotNull(actual = javaClass.classLoader.getResource(file)).readBytes()
+        val iNesData = Resource(path = file).readBytes()
         val cartridge = Cartridge(backupRAM = backupRAM, iNesData = iNesData)
         val audioSampleNotifier = object : AudioSampleNotifier {
             override fun notifySample(value: UByte) = Unit
@@ -372,7 +384,7 @@ class NesTestRomsTest {
                 val key2 = data[2].toString(16).padStart(2, '0')
                 val key3 = data[3].toString(16).padStart(2, '0')
                 val message = data.drop(n = 4).takeWhile { it != 0.toUByte() }
-                    .toUByteArray().asByteArray().toString(Charsets.UTF_8)
+                    .toUByteArray().asByteArray().decodeToString()
                 fail(
                     message = """
                         |タイムアウト ${count / 60} [sec]？
@@ -396,11 +408,11 @@ class NesTestRomsTest {
             data[passFirst + 4] == 'E'.code.toUByte() &&
             data[passFirst + 5] == 'D'.code.toUByte()
         ) {
-            println(
+            Logger.d {
                 data.asSequence().take(n = 0x400).windowed(size = 32, step = 32, partialWindows = true)
-                    .map { String(it.toUByteArray().asByteArray(), Charsets.US_ASCII).trim { c -> c < ' ' }.trimEnd() }
+                    .map { it.toUByteArray().asByteArray().decodeToString().trim { c -> c < ' ' }.trimEnd() }
                     .filter { it.isNotEmpty() }.joinToString(separator = "\n").trimEnd()
-            )
+            }
             return true
         }
         if (failFirst in 0..<0x400 &&
@@ -414,7 +426,7 @@ class NesTestRomsTest {
             repeat(times = 12 * 20) { system.executeMasterClockStep() }
             // 失敗
             val message = data.asSequence().take(n = 0x400).windowed(size = 32, step = 32, partialWindows = true)
-                .map { String(it.toUByteArray().asByteArray(), Charsets.US_ASCII).trim { c -> c < ' ' }.trimEnd() }
+                .map { it.toUByteArray().asByteArray().decodeToString().trim { c -> c < ' ' }.trimEnd() }
                 .filter { it.isNotEmpty() }.joinToString(separator = "\n").trimEnd()
             fail(
                 message = """

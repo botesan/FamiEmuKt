@@ -50,10 +50,12 @@ class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, 
 
     private val cpuBus = CPUBus(mapper = cartridge.mapper, dma = dma, ram = ram, apu = apu, ppu = ppu, pad = pad)
     private val cpuRegisters = CPURegisters()
-
-    private val cpu: CPU by lazy {
-        CPU(cpuRegisters = cpuRegisters, cpuBus = cpuBus, dma = dma, stateObserver = cartridge.mapper.stateObserver)
-    }
+    private val cpu: CPU = CPU(
+        cpuRegisters = cpuRegisters,
+        cpuBus = cpuBus,
+        dma = dma,
+        stateObserver = cartridge.mapper.stateObserver,
+    )
 
     val pixelsRGB32: IntArray by ppu::pixelsRGB32
 
@@ -100,8 +102,10 @@ class NesSystem(cartridge: Cartridge, audioSampleNotifier: AudioSampleNotifier, 
         apu.executeMasterClockStep()
         val drawFrame = ppu.executeMasterClockStep()
         if (cpuResult != null) {
+            val instruction = cpuResult.instruction
+            cpuResult.recycle()
             // リセット要求を処理
-            if (cpuResult.instruction != null && executeResetIfNeeded()) return false
+            if (instruction != null && executeResetIfNeeded()) return false
         }
         return drawFrame
     }

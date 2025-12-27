@@ -29,6 +29,7 @@ object ALR : UnofficialOpCode(name = "ALR", isAddCyclePageCrossed = false) {
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0U)
         registers.P.C = ((and.toUInt() and 0x01U) != 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -56,6 +57,7 @@ object ANC : UnofficialOpCode(name = "ANC", isAddCyclePageCrossed = false) {
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
         registers.P.C = ((result.toUInt() and 0x80U) != 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -79,6 +81,7 @@ object ANE : UnofficialOpCode(name = "ANE", isAddCyclePageCrossed = false) {
         registers.A = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
+        operand.recycle()
         return 0
     }
 }
@@ -119,6 +122,7 @@ object ARR : UnofficialOpCode(name = "ARR", isAddCyclePageCrossed = false) {
         }
         registers.P.Z = (result.toByte() == 0.toByte())
         registers.P.C = ((and.toUInt() and 0x80U) != 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -145,6 +149,7 @@ object DCP : UnofficialOpCode(name = "DCP", isAddCyclePageCrossed = false) {
         registers.P.N = cmp.toUByte().toByte() < 0
         registers.P.Z = (cmp == 0U)
         registers.P.C = ((cmp and 0x100U) == 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -176,6 +181,7 @@ object ISB : UnofficialOpCode(name = "ISB", isAddCyclePageCrossed = false) {
         registers.P.V = (sbcS < Byte.MIN_VALUE || sbcS > Byte.MAX_VALUE)
         registers.P.Z = (sbcS == 0)
         registers.P.C = ((sbcU and 0x100U) == 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -196,7 +202,9 @@ object LAS : UnofficialOpCode(name = "LAS", isAddCyclePageCrossed = true) {
         registers.S = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -219,7 +227,9 @@ object LAX : UnofficialOpCode(name = "LAX", isAddCyclePageCrossed = true) {
         registers.X = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -243,6 +253,7 @@ object LXA : UnofficialOpCode(name = "LXA", isAddCyclePageCrossed = false) {
         registers.X = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
+        operand.recycle()
         return 0
     }
 }
@@ -270,6 +281,7 @@ object RLA : UnofficialOpCode(name = "RLA", isAddCyclePageCrossed = false) {
         registers.A = and
         registers.P.N = and.toByte() < 0
         registers.P.Z = (and == 0.toUByte())
+        operand.recycle()
         return 0
     }
 }
@@ -302,6 +314,7 @@ object RRA : UnofficialOpCode(name = "RRA", isAddCyclePageCrossed = false) {
         registers.P.V = (resultS < Byte.MIN_VALUE || resultS > Byte.MAX_VALUE)
         registers.P.Z = (resultU.toByte() == 0.toByte())
         registers.P.C = ((resultU and 0x100U) != 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -321,6 +334,7 @@ object SAX : UnofficialOpCode(name = "SAX", isAddCyclePageCrossed = false) {
         val operand = instruction.addressing.operand(bus, registers)
         val result = registers.A and registers.X
         bus.writeMemIO(address = operand.operand, value = result)
+        operand.recycle()
         return 0
     }
 }
@@ -345,6 +359,7 @@ object SBX : UnofficialOpCode(name = "SBX", isAddCyclePageCrossed = false) {
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0U)
         registers.P.C = ((result and 0x100U) == 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -367,6 +382,7 @@ object SHA : UnofficialOpCode(name = "SHA", isAddCyclePageCrossed = false) {
         val operand = instruction.addressing.operand(bus, registers)
         val result = (registers.A and registers.X and ((operand.operand ushr 8) + 1).toUByte())
         instruction.addressing.write(value = result, operand = operand, bus = bus, registers = registers)
+        operand.recycle()
         return 0
     }
 }
@@ -392,6 +408,7 @@ object SHX : UnofficialOpCode(name = "SHX", isAddCyclePageCrossed = false) {
         } else {
             bus.writeMemIO(address = (registers.X.toUInt() shl 8).toInt(), value = result)
         }
+        operand.recycle()
         return 0
     }
 }
@@ -417,6 +434,7 @@ object SHY : UnofficialOpCode(name = "SHY", isAddCyclePageCrossed = false) {
         } else {
             bus.writeMemIO(address = (registers.Y.toUInt() shl 8).toInt(), value = result)
         }
+        operand.recycle()
         return 0
     }
 }
@@ -444,6 +462,7 @@ object SLO : UnofficialOpCode(name = "SLO", isAddCyclePageCrossed = false) {
         registers.A = opa
         registers.P.N = opa.toByte() < 0
         registers.P.Z = (opa == 0.toUByte())
+        operand.recycle()
         return 0
     }
 }
@@ -471,6 +490,7 @@ object SRE : UnofficialOpCode(name = "SRE", isAddCyclePageCrossed = false) {
         registers.A = eor
         registers.P.N = eor.toByte() < 0
         registers.P.Z = (eor == 0.toUByte())
+        operand.recycle()
         return 0
     }
 }
@@ -494,6 +514,7 @@ object TAS : UnofficialOpCode(name = "TAS", isAddCyclePageCrossed = false) {
         registers.S = ax
         val result = ax and ((operand.operand ushr 8) + 1).toUByte()
         instruction.addressing.write(value = result, operand = operand, bus = bus, registers = registers)
+        operand.recycle()
         return 0
     }
 }

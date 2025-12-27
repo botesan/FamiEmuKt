@@ -5,6 +5,7 @@ import jp.mito.famiemukt.emurator.cartridge.StateObserver
 import jp.mito.famiemukt.emurator.cartridge.StateObserverAdapter
 import jp.mito.famiemukt.emurator.util.BIT_MASK_6
 import jp.mito.famiemukt.emurator.util.BIT_MASK_7
+import jp.mito.famiemukt.emurator.util.isBit
 
 /*
   https://www.nesdev.org/wiki/INES_Mapper_019
@@ -84,7 +85,7 @@ class Mapper019(
             in 0x5800..0x5FFF -> {
                 interrupter.requestOffIRQ()
                 irqCounter = (irqCounter and 0x00FF) or ((value.toInt() and 0x7F) shl 8)
-                isEnableIRQ = (value.toInt() and BIT_MASK_7.toInt()) != 0
+                isEnableIRQ = value.isBit(bitMask = BIT_MASK_7)
             }
         }
     }
@@ -113,11 +114,11 @@ class Mapper019(
             // |+++-++++- High 7 bits of IRQ counter
             // +--------- IRQ Enable: (0: disabled; 1: enabled)
             in 0x5800..0x5FFF -> {
-                return if (isEnableIRQ) {
-                    (irqCounter ushr 8).toUByte() or BIT_MASK_7
+                return (if (isEnableIRQ) {
+                    (irqCounter ushr 8) or BIT_MASK_7
                 } else {
-                    (irqCounter ushr 8).toUByte()
-                }
+                    (irqCounter ushr 8)
+                }).toUByte()
             }
         }
         TODO()
@@ -159,8 +160,8 @@ class Mapper019(
             // |+-------- Disable sound if set
             // +--------- Pin 22 (open collector) reflects the inverse of this value, unchanged by the address bus inputs.
             in 0xE000..0xE7FF -> {
-                value and BIT_MASK_7 // TODO: A
-                value and BIT_MASK_6 // TODO: M
+                value.isBit(bitMask = BIT_MASK_7) // TODO: A
+                value.isBit(bitMask = BIT_MASK_6) // TODO: M
                 selectedPRGBankNo1 = value.toInt() and 0b0011_1111 and prgBankNoMask
             }
             // PRG Select 2 / CHR-RAM Enable ($E800-$EFFF) w
@@ -176,8 +177,8 @@ class Mapper019(
             //              0: Pages $E0-$FF use NT RAM as CHR-RAM
             //              1: Pages $E0-$FF are the last $20 banks of CHR-ROM
             in 0xE800..0xEFFF -> {
-                value and BIT_MASK_7 // TODO: H
-                value and BIT_MASK_6 // TODO: L
+                value.isBit(bitMask = BIT_MASK_7) // TODO: H
+                value.isBit(bitMask = BIT_MASK_6) // TODO: L
                 selectedPRGBankNo2 = value.toInt() and 0b0011_1111 and prgBankNoMask
             }
             // PRG Select 3 ($F000-$F7FF) w
@@ -192,8 +193,8 @@ class Mapper019(
             //   if PPU A13 is low, then C bitwise-or PPU A12
             // Additionally, choosing bank $3F here replaces the CHR bank output with debugging information for the internal audio state
             in 0xF000..0xF7FF -> {
-                value and BIT_MASK_7 // TODO: C
-                value and BIT_MASK_6 // TODO: D
+                value.isBit(bitMask = BIT_MASK_7) // TODO: C
+                value.isBit(bitMask = BIT_MASK_6) // TODO: D
                 selectedPRGBankNo3 = value.toInt() and 0b0011_1111 and prgBankNoMask
             }
             // Write Protect for External RAM AND Chip RAM Address Port ($F800-$FFFF) w

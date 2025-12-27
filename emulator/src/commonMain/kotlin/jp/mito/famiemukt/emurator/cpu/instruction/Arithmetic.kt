@@ -34,7 +34,9 @@ object ADC : OfficialOpCode(name = "ADC", isAddCyclePageCrossed = true) {
         registers.P.V = (resultS < Byte.MIN_VALUE || resultS > Byte.MAX_VALUE)
         registers.P.Z = (resultU.toByte() == 0.toByte())
         registers.P.C = ((resultU and 0x100U) != 0U)
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -52,7 +54,9 @@ object SBC : OfficialOpCode(name = "SBC", isAddCyclePageCrossed = true) {
         registers.P.V = (resultS < Byte.MIN_VALUE || resultS > Byte.MAX_VALUE)
         registers.P.Z = (resultU.toByte() == 0.toByte())
         registers.P.C = ((resultU and 0x100U) == 0U)
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -67,6 +71,7 @@ object DEC : OfficialOpCode(name = "DEC", isAddCyclePageCrossed = false) {
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
         // ページまたぎでも追加無し
+        operand.recycle()
         return 0 // operand.addCycle
     }
 }
@@ -104,6 +109,7 @@ object INC : OfficialOpCode(name = "INC", isAddCyclePageCrossed = false) {
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
         // ページまたぎでも追加無し
+        operand.recycle()
         return 0 // operand.addCycle
     }
 }
@@ -139,7 +145,9 @@ object AND : OfficialOpCode(name = "AND", isAddCyclePageCrossed = true) {
         registers.A = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -152,7 +160,9 @@ object EOR : OfficialOpCode(name = "EOR", isAddCyclePageCrossed = true) {
         registers.A = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -165,7 +175,9 @@ object ORA : OfficialOpCode(name = "ORA", isAddCyclePageCrossed = true) {
         registers.A = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -181,6 +193,7 @@ object ASL : OfficialOpCode(name = "ASL", isAddCyclePageCrossed = false) {
         registers.P.Z = (result.toUByte() == 0.toUByte())
         registers.P.C = ((result and 0x100U) != 0U)
         // ページまたぎでも追加無し
+        operand.recycle()
         return 0 // operand.addCycle
     }
 }
@@ -198,6 +211,7 @@ object LSR : OfficialOpCode(name = "LSR", isAddCyclePageCrossed = false) {
         registers.P.Z = (result == 0U)
         registers.P.C = ((aOrMemory.toUInt() and 0x01U) != 0U)
         // ページまたぎでも追加無し
+        operand.recycle()
         return 0 // operand.addCycle
     }
 }
@@ -219,6 +233,7 @@ object ROL : OfficialOpCode(name = "ROL", isAddCyclePageCrossed = false) {
         registers.P.Z = (result.toUByte() == 0.toUByte())
         registers.P.C = ((result and 0x100U) != 0U)
         // ページまたぎでも追加無し
+        operand.recycle()
         return 0 // operand.addCycle
     }
 }
@@ -240,6 +255,7 @@ object ROR : OfficialOpCode(name = "ROR", isAddCyclePageCrossed = false) {
         registers.P.Z = (result == 0U)
         registers.P.C = ((aOrMemory.toUInt() and 0x001U) != 0U)
         // ページまたぎでも追加無し
+        operand.recycle()
         return 0 // operand.addCycle
     }
 }
@@ -254,7 +270,9 @@ object CMP : OfficialOpCode(name = "CMP", isAddCyclePageCrossed = true) {
         registers.P.N = result.toUByte().toByte() < 0
         registers.P.Z = (result == 0U)
         registers.P.C = ((result and 0x100U) == 0U)
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -268,6 +286,7 @@ object CPX : OfficialOpCode(name = "CPX", isAddCyclePageCrossed = false) {
         registers.P.N = result.toUByte().toByte() < 0
         registers.P.Z = (result == 0U)
         registers.P.C = ((result and 0x100U) == 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -282,6 +301,7 @@ object CPY : OfficialOpCode(name = "CPY", isAddCyclePageCrossed = false) {
         registers.P.N = result.toUByte().toByte() < 0
         registers.P.Z = (result == 0U)
         registers.P.C = ((result and 0x100U) == 0U)
+        operand.recycle()
         return 0
     }
 }
@@ -297,6 +317,7 @@ object BIT : OfficialOpCode(name = "BIT", isAddCyclePageCrossed = false) {
         registers.P.N = ((memory and 0b1000_0000U) != 0U)
         registers.P.Z = (result == 0U)
         registers.P.V = ((memory and 0b0100_0000U) != 0U)
+        operand.recycle()
         return 0
     }
 }

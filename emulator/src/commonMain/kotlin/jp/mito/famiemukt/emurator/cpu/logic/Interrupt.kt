@@ -1,8 +1,10 @@
 package jp.mito.famiemukt.emurator.cpu.logic
 
+import co.touchlab.kermit.Logger
 import jp.mito.famiemukt.emurator.cpu.CPUBus
 import jp.mito.famiemukt.emurator.cpu.CPURegisters
 import jp.mito.famiemukt.emurator.cpu.InterruptType
+import jp.mito.famiemukt.emurator.cpu.ProcessorStatus
 import jp.mito.famiemukt.emurator.util.toHex
 
 const val INTERRUPT_ADDRESS_RESET: Int = 0xFFFC
@@ -13,6 +15,7 @@ const val INTERRUPT_ADDRESS_BRK: Int = 0xFFFE
 fun executeInterruptBRK(bus: CPUBus, registers: CPURegisters) =
     executeInterrupt(type = InterruptType.BRK, bus, registers)
 
+private val workP = ProcessorStatus()
 fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) {
     val beforePC = registers.PC
     // タイプ毎に実行
@@ -37,7 +40,7 @@ fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) 
             // D        | 0             | unchanged
             // V        | 0             | unchanged
             // N        | 0             | unchanged
-            printMovePCLog(command = ">RESET", beforePC = beforePC, registers = registers)
+            logMovePC(command = ">RESET", beforePC = beforePC, registers = registers)
         }
 
         InterruptType.NMI -> {
@@ -48,13 +51,13 @@ fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) 
             push(value = h, bus, registers)
             push(value = l, bus, registers)
             // break flagをクリア、bit 5 は予約で 1 セット済み（のはず）
-            val p = registers.P.copy().apply { B = false }.value
+            val p = workP.also { it.value = registers.P.value; it.B = false }.value
             push(value = p, bus, registers)
 //println("NMI PUSH : PC=${pc.toHex()} P=${p.toHex()}")
             // 割り込み
             registers.PC = bus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
             registers.P.I = true
-            printMovePCLog(command = ">NMI", beforePC = beforePC, registers = registers)
+            logMovePC(command = ">NMI", beforePC = beforePC, registers = registers)
         }
 
         InterruptType.IRQ -> {
@@ -65,13 +68,13 @@ fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) 
             push(value = h, bus, registers)
             push(value = l, bus, registers)
             // break flagをクリア、bit 5 は予約で 1 セット済み（のはず）
-            val p = registers.P.copy().apply { B = false }.value
+            val p = workP.also { it.value = registers.P.value; it.B = false }.value
             push(value = p, bus, registers)
 //println("IRQ PUSH : PC=${pc.toHex()} P=${p.toHex()}")
             // 割り込み
             registers.PC = bus.readWordMemIO(address = INTERRUPT_ADDRESS_IRQ)
             registers.P.I = true
-            printMovePCLog(command = ">IRQ", beforePC = beforePC, registers = registers)
+            logMovePC(command = ">IRQ", beforePC = beforePC, registers = registers)
         }
         /*
         https://www.masswerk.at/6502/6502_instruction_set.html#BRK
@@ -91,7 +94,7 @@ fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) 
             push(value = h, bus, registers)
             push(value = l, bus, registers)
             // break flagをセット、bit 5 は予約で 1 セット済み（のはず）
-            val p = registers.P.copy().apply { B = true }.value
+            val p = workP.also { it.value = registers.P.value; it.B = true }.value
             push(value = p, bus, registers)
 //println("BRK PUSH : PC=${pc.toUShort().toHex()} P=${p.toHex()}")
             // 割り込み
@@ -103,20 +106,16 @@ fun executeInterrupt(type: InterruptType, bus: CPUBus, registers: CPURegisters) 
             // when any interrupt is triggered (NMI, IRQ/BRK, or reset).
             // Restored to its previous state from the stack when leaving an interrupt handler with RTI.
             registers.P.I = true
-            printMovePCLog(command = ">BRK", beforePC = beforePC, registers = registers)
+            logMovePC(command = ">BRK", beforePC = beforePC, registers = registers)
         }
     }
 }
 
-fun printMovePCLog(
+fun logMovePC(
     command: String,
     beforePC: UShort,
     registers: CPURegisters,
 ) {
-    @Suppress("ConstantConditionIf")
-    if (false) {
-        val r = registers
-        println("${beforePC.toHex()} : ${command.padEnd(length = 6)} ${r.PC.toHex()}  / S:${r.S.toHex()} / ${r.P.value.toHex()}")
-//        println("${beforePC.toHex()} : ${command.padEnd(length = 6)} ${r.PC.toHex()}  / S:${r.S.toHex()} / ${r.P.value.toHex()} / $beforeExecutedOpCode")
-    }
+    val r = registers
+    Logger.v { "${beforePC.toHex()} : ${command.padEnd(length = 6)} ${r.PC.toHex()}  / S:${r.S.toHex()} / ${r.P.value.toHex()}" }
 }

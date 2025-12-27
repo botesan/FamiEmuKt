@@ -18,7 +18,9 @@ object LDA : OfficialOpCode(name = "LDA", isAddCyclePageCrossed = true) {
         registers.A = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -30,7 +32,9 @@ object LDX : OfficialOpCode(name = "LDX", isAddCyclePageCrossed = true) {
         registers.X = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -42,7 +46,9 @@ object LDY : OfficialOpCode(name = "LDY", isAddCyclePageCrossed = true) {
         registers.Y = result
         registers.P.N = result.toByte() < 0
         registers.P.Z = (result == 0.toUByte())
-        return operand.addCycle
+        val addCycle = operand.addCycle
+        operand.recycle()
+        return addCycle
     }
 }
 
@@ -51,6 +57,7 @@ object STA : OfficialOpCode(name = "STA", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         bus.writeMemIO(address = operand.operand, value = registers.A)
+        operand.recycle()
         return 0
     }
 }
@@ -60,6 +67,7 @@ object STX : OfficialOpCode(name = "STX", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         bus.writeMemIO(address = operand.operand, value = registers.X)
+        operand.recycle()
         return 0
     }
 }
@@ -69,6 +77,7 @@ object STY : OfficialOpCode(name = "STY", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         bus.writeMemIO(address = operand.operand, value = registers.Y)
+        operand.recycle()
         return 0
     }
 }

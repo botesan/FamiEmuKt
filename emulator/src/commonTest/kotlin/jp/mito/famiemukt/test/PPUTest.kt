@@ -1,10 +1,15 @@
 package jp.mito.famiemukt.test
 
+import co.touchlab.kermit.CommonWriter
+import co.touchlab.kermit.Logger
+import co.touchlab.kermit.Severity
 import dev.mokkery.answering.returns
 import dev.mokkery.every
 import dev.mokkery.mock
 import dev.mokkery.verify
 import dev.mokkery.verify.VerifyMode.Companion.exactly
+import jp.mito.famiemukt.emurator.NTSC_CPU_CYCLES_PER_MASTER_CLOCKS
+import jp.mito.famiemukt.emurator.NTSC_PPU_CYCLES_PER_MASTER_CLOCKS
 import jp.mito.famiemukt.emurator.cartridge.A12
 import jp.mito.famiemukt.emurator.cartridge.NothingStateObserver
 import jp.mito.famiemukt.emurator.cartridge.mapper.Mapper
@@ -15,10 +20,17 @@ import jp.mito.famiemukt.emurator.ppu.PPUBus
 import jp.mito.famiemukt.emurator.ppu.PPURegisters
 import jp.mito.famiemukt.emurator.ppu.VideoRAM
 import jp.mito.famiemukt.emurator.util.VisibleForTesting
+import jp.mito.famiemukt.emurator.util.toHex
 import kotlin.test.*
 
 @OptIn(ExperimentalUnsignedTypes::class, VisibleForTesting::class)
 class PPUTest {
+    @BeforeTest
+    fun setup() {
+        Logger.setLogWriters(CommonWriter())
+        Logger.setMinSeverity(Severity.Info)
+    }
+
     @Test
     fun testConstructor() {
         val mapper = mock<Mapper>()
@@ -628,5 +640,158 @@ class PPUTest {
             actual = ppu.readPPUStatus() and 0x80u,
             message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}",
         )
+    }
+
+    // 主に 10-even_odd_timing のための確認
+    // ロジックはざっくりコピー＆BGの代わりにスプライト
+    // set_test 2,"Clock is skipped too soon, relative to enabling BG" の代わりのつもり
+    @Test
+    fun testFor10EvenOddTiming_2() {
+        assertEquals(expected = 8, actual = checkFor10EvenOddTiming_2_test(a = 4, x = 0x00u, y = 0x10u))
+    }
+
+    // 主に 10-even_odd_timing のための確認
+    // ロジックはざっくりコピー＆BGの代わりにスプライト
+    // set_test 3,"Clock is skipped too late, relative to enabling BG" の代わりのつもり
+    @Test
+    fun testFor10EvenOddTiming_3() {
+        // TODO: NG・何となくPPU側の動作としてtoo lateになっていない気がする
+        assertEquals(expected = 8/*7になる*/, actual = checkFor10EvenOddTiming_2_test(a = 5, x = 0x00u, y = 0x10u))
+    }
+
+    // 主に 10-even_odd_timing のための確認
+    // ロジックはざっくりコピー＆BGの代わりにスプライト
+    // set_test 4,"Clock is skipped too soon, relative to disabling BG" の代わりのつもり
+    @Test
+    fun testFor10EvenOddTiming_4() {
+        assertEquals(expected = 9, actual = checkFor10EvenOddTiming_2_test(a = 4, x = 0x10u, y = 0x00u))
+    }
+
+    // 主に 10-even_odd_timing のための確認
+    // ロジックはざっくりコピー＆BGの代わりにスプライト
+    // set_test 5,"Clock is skipped too late, relative to disabling BG" の代わりのつもり
+    @Test
+    fun testFor10EvenOddTiming_5() {
+        // TODO: NG・何となくPPU側の動作としてtoo lateになっていない気がする
+        assertEquals(expected = 7/*8になる*/, actual = checkFor10EvenOddTiming_2_test(a = 5, x = 0x10u, y = 0x00u))
+    }
+
+    private fun checkFor10EvenOddTiming_2_test(a: Int, x: UByte, y: UByte): Int {
+        val mapper = Mapper000(
+            cartridge = mock {
+                every { information } returns mock {
+                    every { chrRom8Units } returns 0
+                    every { ignoreMirroring } returns false
+                    every { mirroringVertical } returns false
+                }
+            },
+            prgRom = UByteArray(size = 0),
+            chrRom = UByteArray(size = 0),
+        )
+        val interrupter = mock<Interrupter>()
+        every { interrupter.requestNMI() } returns Unit
+        every { interrupter.requestNMI(levelLow = false) } returns Unit
+        val stateObserver = NothingStateObserver
+        val a12 = A12(stateObserver = stateObserver)
+        val videoRAM = VideoRAM()
+        val ppuRegisters = PPURegisters(a12 = a12)
+        val ppuBus = PPUBus(mapper = mapper, videoRAM = videoRAM)
+        val ppu = PPU(
+            ppuRegisters = ppuRegisters,
+            ppuBus = ppuBus,
+            interrupter = interrupter,
+            a12 = a12,
+        )
+        // スプライト表示無し
+        ppu.writePPUControl(value = 0x80u)
+        ppu.writePPUMask(value = 0x00u)
+        //repeat(times = 341 * 262) { ppu._executePPUCycleStep() }
+        //assertTrue(actual = ppu._isOddFrame)
+        assertEquals(expected = 0, actual = ppu._ppuX, message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}")
+        assertEquals(expected = 0, actual = ppu._ppuY, message = "ppuX=${ppu._ppuX},ppuY=${ppu._ppuY}")
+        //
+        val ppuParCpu = NTSC_CPU_CYCLES_PER_MASTER_CLOCKS / NTSC_PPU_CYCLES_PER_MASTER_CLOCKS
+        val adjust = 2359
+        //    test:   jsr disable_rendering0
+        //    jsr sync_vbl_delay
+        repeat(times = 341 * 241 + 2 + a + 48/*?*/) { ppu._executePPUCycleStep() }
+        Logger.d { "\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame},a=$a,x=${x.toHex()},y=${y.toHex()}" }
+        //            delay 13
+        repeat(times = (13) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay 13:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    ; $2001=X for most of VBL, Y for part of frame, then 0
+        //    stx $2001
+        ppu.writePPUMask(value = x)
+        Logger.d { "\twritePPUMask(value = ${x.toHex()})" }
+        //    delay adjust-4-4
+        repeat(times = (adjust - 4 - 4 + 4/*stx $2001*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay adjust-4-4:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    sty $2001
+        ppu.writePPUMask(value = y)
+        Logger.d { "\twritePPUMask(value = ${y.toHex()})" }
+        //    delay 20000
+        //    lda #0
+        repeat(times = (20000 + 4/*sty $2001*/ + 2/*lda #0*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay 20000:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    sta $2001
+        ppu.writePPUMask(value = 0x00u)
+        Logger.d { "\twritePPUMask(value = 0x00u)" }
+        //    delay 29781-adjust-4-20000-6
+        repeat(times = (29781 - adjust - 4 - 20000 - 6 + 4/*sta $2001*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay 29781-adjust-4-20000-6:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    ; Two frames with BG off
+        //    delay 29781
+        //    delay 29781-1
+        repeat(times = (29781) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay 29781:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        repeat(times = (29781 - 1) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay 29781-1:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    ; Third frame same as first. Since clock is skipped every
+        //    ; other frame, only one of these two will have the skipped
+        //    ; clock, so its effect on later frame timing won't be a
+        //    ; problem.
+        //    stx $2001
+        ppu.writePPUMask(value = x)
+        Logger.d { "\twritePPUMask(value = ${x.toHex()})" }
+        //    delay adjust-4
+        repeat(times = (adjust - 4 + 4/*stx $2001*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay adjust-4:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    sty $2001
+        ppu.writePPUMask(value = y)
+        Logger.d { "\twritePPUMask(value = ${y.toHex()})" }
+        //    delay 20000
+        //    lda #0
+        repeat(times = (20000 + 4/*sty $2001*/ + 2/*lda #0*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay 20000:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    sta $2001
+        ppu.writePPUMask(value = 0x00u)
+        Logger.d { "\twritePPUMask(value = 0x00u)" }
+        //    delay 29781-adjust-4-20000-6
+        repeat(times = (29781 - adjust - 4 - 20000 - 6 + 4/*sta $2001*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay 29781-adjust-4-20000-6:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    ; Find number of PPU clocks until VBL
+        //    delay 29781-3-22
+        repeat(times = (29781 - 3 - 22) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "delay 29781-3-22:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame}" }
+        //    ldx #0
+        var n = 0
+        repeat(times = (2/*ldx #0*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+        Logger.d { "ldx #0:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame},n=$n" }
+        Logger.d { "" }
+        do {
+            //    :    delay 29781-2-4-3
+            //    inx
+            if (++n >= 256) fail("ppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame},n=$n")
+            repeat(times = (29781 - 2 - 4 - 3) * ppuParCpu) { ppu._executePPUCycleStep() }
+            repeat(times = (2/*inx*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+            Logger.d { "delay 29781-2-4-3:\n\tppuX=${ppu._ppuX},ppuY=${ppu._ppuY},isOddFrame=${ppu._isOddFrame},n=$n" }
+            //    bit PPUSTATUS
+            val status = ppu.readPPUStatus()
+            Logger.d { "\tppu.readPPUStatus() => ${status.toHex()},n=$n" }
+            //    bpl :-
+            repeat(times = (4/*bit PPUSTATUS*/ + 3/*bpl*/) * ppuParCpu) { ppu._executePPUCycleStep() }
+        } while (status and 0x80u == 0.toUByte())
+        //
+        return n
     }
 }

@@ -1,5 +1,6 @@
 package jp.mito.famiemukt.frontend
 
+import co.touchlab.kermit.Logger
 import jp.mito.famiemukt.emurator.NesSystem
 import jp.mito.famiemukt.emurator.apu.AudioSampleNotifier
 import jp.mito.famiemukt.emurator.cartridge.BackupRAM
@@ -97,7 +98,7 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
             }
         } catch (th: Throwable) {
             th.printStackTrace()
-            println(system?.debugInfo(nest = 0))
+            Logger.d { system?.debugInfo(nest = 0) ?: "" }
             exitProcess(status = -1)
         }
     }
@@ -110,6 +111,11 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
                 if (thread.state == Thread.State.NEW) {
                     thread.start()
                 }
+            }
+
+            override fun windowClosed(e: WindowEvent?) {
+                super.windowClosed(e)
+                audioSampleNotifier.line.close()
             }
         })
         addKeyListener(object : KeyAdapter() {
@@ -136,7 +142,7 @@ class DisplayFrame(iNesFilePath: String) : JFrame() {
                     KeyEvent.VK_X -> system?.isPad1B = false
                     KeyEvent.VK_SPACE -> system?.isPad1Select = false
                     KeyEvent.VK_ENTER -> system?.isPad1Start = false
-                    KeyEvent.VK_D -> println(system?.debugInfo(nest = 0))
+                    KeyEvent.VK_D -> Logger.d { system?.debugInfo(nest = 0) ?: "" }
                     KeyEvent.VK_R -> {
                         val system = system
                         if (system != null) {

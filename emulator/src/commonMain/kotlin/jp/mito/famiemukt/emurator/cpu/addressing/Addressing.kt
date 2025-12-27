@@ -2,8 +2,36 @@ package jp.mito.famiemukt.emurator.cpu.addressing
 
 import jp.mito.famiemukt.emurator.cpu.CPUBus
 import jp.mito.famiemukt.emurator.cpu.CPURegisters
+import jp.mito.famiemukt.emurator.cpu.CPUResult
+import jp.mito.famiemukt.emurator.util.Poolable
 
-data class Operand(val operand: Int, val addCycle: Int)
+interface Operand : Poolable<CPUResult> {
+    val operand: Int
+    val addCycle: Int
+
+    companion object {
+        fun obtain(operand: Int, addCycle: Int): Operand = OperandImpl.obtain(operand = operand, addCycle = addCycle)
+    }
+
+    private data class OperandImpl(override var operand: Int, override var addCycle: Int) : Operand {
+        override fun recycle() {
+//            operand = 0
+//            addCycle = 0
+            pool.recycle(obj = this)
+        }
+
+        companion object {
+            private val pool: Poolable.ObjectPool<OperandImpl> = Poolable.ObjectPool(initialCapacity = 1)
+            fun obtain(operand: Int, addCycle: Int): OperandImpl = pool.obtain()?.also {
+                it.operand = operand
+                it.addCycle = addCycle
+            } ?: OperandImpl(
+                operand = operand,
+                addCycle = addCycle,
+            )
+        }
+    }
+}
 
 sealed interface Addressing {
     val name: String
@@ -19,23 +47,23 @@ sealed interface Addressing {
 
     object Accumulator : OperandAccumulatorAddressing(name = "Accumulator") {
         override fun operand(bus: CPUBus, registers: CPURegisters): Operand =
-            Operand(operand = registers.A.toInt(), addCycle = 0)
+            Operand.obtain(operand = registers.A.toInt(), addCycle = 0)
     }
 
     object Immediate : OperandAccumulatorAddressing(name = "Immediate") {
         override fun write(value: UByte, operand: Operand, bus: CPUBus, registers: CPURegisters) = notSupported()
         override fun operand(bus: CPUBus, registers: CPURegisters): Operand =
-            Operand(operand = fetch(bus, registers).toInt(), addCycle = 0)
+            Operand.obtain(operand = fetch(bus, registers).toInt(), addCycle = 0)
     }
 
     object ZeroPage : MemoryAddressing(name = "ZeroPage") {
         override fun operand(bus: CPUBus, registers: CPURegisters): Operand =
-            Operand(operand = fetch(bus, registers).toInt(), addCycle = 0)
+            Operand.obtain(operand = fetch(bus, registers).toInt(), addCycle = 0)
     }
 
     object ZeroPageX : MemoryAddressing(name = "ZeroPageX") {
         override fun operand(bus: CPUBus, registers: CPURegisters): Operand =
-            Operand(
+            Operand.obtain(
                 operand = ((fetch(bus, registers) + registers.X) and 0xFFU).toInt(),
                 addCycle = 0,
             )
@@ -43,7 +71,7 @@ sealed interface Addressing {
 
     object ZeroPageY : MemoryAddressing(name = "ZeroPageY") {
         override fun operand(bus: CPUBus, registers: CPURegisters): Operand =
-            Operand(
+            Operand.obtain(
                 operand = ((fetch(bus, registers) + registers.Y) and 0xFFU).toInt(),
                 addCycle = 0,
             )
@@ -54,7 +82,7 @@ sealed interface Addressing {
             val fetched = fetch(bus, registers).toByte()
             val base = registers.PC.toInt()
             val result = fetched + base
-            return Operand(
+            return Operand.obtain(
                 operand = result and 0xFFFF,
                 addCycle = if ((base xor result) and 0xFF00 == 0) 0 else 1,
             )
@@ -63,14 +91,14 @@ sealed interface Addressing {
 
     object Absolute : MemoryAddressing(name = "Absolute") {
         override fun operand(bus: CPUBus, registers: CPURegisters): Operand =
-            Operand(operand = fetchWord(bus, registers).toInt(), addCycle = 0)
+            Operand.obtain(operand = fetchWord(bus, registers).toInt(), addCycle = 0)
     }
 
     object AbsoluteX : MemoryAddressing(name = "AbsoluteX") {
         override fun operand(bus: CPUBus, registers: CPURegisters): Operand {
             val base = fetchWord(bus, registers).toUInt()
             val result = base + registers.X
-            return Operand(
+            return Operand.obtain(
                 operand = result.toInt() and 0xFFFF,
                 addCycle = if ((base xor result) and 0xFF00U == 0U) 0 else 1,
             )
@@ -81,7 +109,7 @@ sealed interface Addressing {
         override fun operand(bus: CPUBus, registers: CPURegisters): Operand {
             val base = fetchWord(bus, registers).toUInt()
             val result = base + registers.Y
-            return Operand(
+            return Operand.obtain(
                 operand = result.toInt() and 0xFFFF,
                 addCycle = if ((base xor result) and 0xFF00U == 0U) 0 else 1,
             )
@@ -96,7 +124,7 @@ sealed interface Addressing {
             val nextAddress = (address and 0xFF00) or ((address + 1) and 0x00FF)
             val l = bus.readMemIO(address = address)
             val h = bus.readMemIO(address = nextAddress)
-            return Operand(operand = l.toInt() or (h.toInt() shl 8), addCycle = 0)
+            return Operand.obtain(operand = l.toInt() or (h.toInt() shl 8), addCycle = 0)
         }
     }
 
@@ -107,7 +135,7 @@ sealed interface Addressing {
             val nextAddress = (address and 0xFF00) or ((address + 1) and 0x00FF)
             val l = bus.readMemIO(address = address)
             val h = bus.readMemIO(address = nextAddress)
-            return Operand(operand = l.toInt() or (h.toInt() shl 8), addCycle = 0)
+            return Operand.obtain(operand = l.toInt() or (h.toInt() shl 8), addCycle = 0)
         }
     }
 
@@ -120,7 +148,7 @@ sealed interface Addressing {
             val h = bus.readMemIO(address = nextAddress)
             val base = ((l.toUInt() or (h.toUInt() shl 8)))
             val result = base + registers.Y
-            return Operand(
+            return Operand.obtain(
                 operand = result.toInt() and 0xFFFF,
                 addCycle = if (((base xor result) and 0xFF00U) == 0U) 0 else 1,
             )

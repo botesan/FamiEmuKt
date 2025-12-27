@@ -1,20 +1,16 @@
 package jp.mito.famiemukt.emurator.ppu
 
-data class PaletteColor(val r: UByte, val g: UByte, val b: UByte) {
-    val rgb32: Int = (r.toInt() shl 16) or (g.toInt() shl 8) or b.toInt()
-}
-
 // https://www.nesdev.org/wiki/PPU_registers#PPUMASK
 // Bit 0 controls a greyscale mode, which causes the palette to use only the colors from the grey column: $00, $10, $20, $30.
 // This is implemented as a bitwise AND with $30 on any value read from PPU $3F00-$3FFF,
 fun convertPaletteToRGB32(palette: UByte, ppuMask: PPUMask): Int =
     when {
-        ppuMask.isGrayscale -> palette and 0x30U
-        else -> palette
+        ppuMask.isGrayscale -> palette.toByte().toInt() and 0x30
+        else -> palette.toByte().toInt()
     }.let {
-        ((ppuMask.value.toInt() and 0b1110_0000) shl 1) or it.toInt()
+        ((ppuMask.value.toByte().toInt() and 0b1110_0000) shl 1) or it
     }.let {
-        FullPaletteColors[it].rgb32
+        FullPaletteColors[it]
     }
 
 // BGRs bMmG
@@ -47,10 +43,14 @@ private val FullPaletteColors = listOf(
     paletteColors.map {
         it.copy(r = (it.r * 16U / 25U).toUByte(), g = (it.g * 16U / 25U).toUByte(), b = (it.b * 16U / 25U).toUByte())
     },
-).flatten().toTypedArray()
+).flatten().map { it.rgb32 }.toIntArray()
 
-private val paletteColors: Array<PaletteColor>
-    get() = rgbValues.map { (r, g, b) -> PaletteColor(r.toUByte(), g.toUByte(), b.toUByte()) }.toTypedArray()
+private data class PaletteColor(val r: UByte, val g: UByte, val b: UByte) {
+    val rgb32: Int = (r.toInt() shl 16) or (g.toInt() shl 8) or b.toInt()
+}
+
+private val paletteColors: List<PaletteColor>
+    get() = rgbValues.map { (r, g, b) -> PaletteColor(r.toUByte(), g.toUByte(), b.toUByte()) }
 
 // https://www.nesdev.org/wiki/PPU_palettes に記載の例とは値が異なる
 // https://github.com/ymduu/EmotionalEngine-NES/blob/main/Programs/src/Nes.cpp

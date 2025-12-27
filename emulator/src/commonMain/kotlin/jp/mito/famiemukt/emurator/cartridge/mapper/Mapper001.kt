@@ -4,6 +4,7 @@ import jp.mito.famiemukt.emurator.cartridge.Cartridge
 import jp.mito.famiemukt.emurator.cartridge.Mirroring
 import jp.mito.famiemukt.emurator.util.BIT_MASK_0
 import jp.mito.famiemukt.emurator.util.BIT_MASK_7
+import jp.mito.famiemukt.emurator.util.isBit
 
 /*
 https://www.nesdev.org/wiki/MMC1
@@ -133,18 +134,18 @@ class Mapper001(
             +--------- A write with bit set will reset shift register
                         and write Control with (Control OR $0C),
                         locking PRG ROM at $C000-$FFFF to the last bank. */
-        if ((value and BIT_MASK_7) != 0.toUByte()) {
+        if (value.isBit(bitMask = BIT_MASK_7)) {
             // reset
             shift = SHIFT_REGISTER_INIT
             control = control or 0x0C
             return
         } else if (shift and 0b0000_0001 == 0) {
             // not full
-            shift = ((value and BIT_MASK_0).toInt() shl 4) or (shift ushr 1)
+            shift = ((value.toByte().toInt() and BIT_MASK_0) shl 4) or (shift ushr 1)
             return
         }
         // 各値へ代入（fullのとき）
-        val pbValue = ((value and BIT_MASK_0).toInt() shl 4) or (shift ushr 1)
+        val pbValue = ((value.toByte().toInt() and BIT_MASK_0) shl 4) or (shift ushr 1)
         when (address) {
             /* Control (internal, $8000-$9FFF) */
             in 0x8000..0x9FFF -> {

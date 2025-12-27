@@ -6,7 +6,7 @@ import jp.mito.famiemukt.emurator.cpu.Instruction
 import jp.mito.famiemukt.emurator.cpu.ProcessorStatus
 import jp.mito.famiemukt.emurator.cpu.logic.executeInterruptBRK
 import jp.mito.famiemukt.emurator.cpu.logic.pop
-import jp.mito.famiemukt.emurator.cpu.logic.printMovePCLog
+import jp.mito.famiemukt.emurator.cpu.logic.logMovePC
 import jp.mito.famiemukt.emurator.cpu.logic.push
 
 // ジャンプ（＋割り込み）命令
@@ -22,6 +22,7 @@ object JMP : OfficialOpCode(name = "JMP", isAddCyclePageCrossed = false) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         registers.PC = operand.operand.toUShort()
+        operand.recycle()
         return 0
     }
 }
@@ -38,7 +39,8 @@ object JSR : OfficialOpCode(name = "JSR", isAddCyclePageCrossed = false) {
         push(value = h, bus, registers)
         push(value = l, bus, registers)
         registers.PC = operand.operand.toUShort()
-        printMovePCLog(command = "JSR", beforePC = beforePC, registers = registers)
+        operand.recycle()
+        logMovePC(command = "JSR", beforePC = beforePC, registers = registers)
         return 0
     }
 }
@@ -52,7 +54,7 @@ object RTS : OfficialOpCode(name = "RTS", isAddCyclePageCrossed = false) {
         val h = pop(bus, registers)
         val value = ((h.toUInt() shl 8) or (l.toUInt())) + 1U
         registers.PC = value.toUShort()
-        printMovePCLog(command = "RTS", beforePC = beforePC, registers = registers)
+        logMovePC(command = "RTS", beforePC = beforePC, registers = registers)
         return 0
     }
 }
@@ -69,18 +71,19 @@ object BRK : OfficialOpCode(name = "BRK", isAddCyclePageCrossed = false) {
    The status register is pulled with the break flag and bit 5 ignored.
    Then PC is pulled from the stack. */
 object RTI : OfficialOpCode(name = "RTI", isAddCyclePageCrossed = false) {
+    private val work = ProcessorStatus()
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val beforePC = registers.PC
         // break flag と bit 5 を無視（実質break flagを変更前で上書き）
         val value = pop(bus, registers)
-        val p = ProcessorStatus(value = value).apply { B = registers.P.B }.value
+        val p = work.also { it.value = value; it.init(); it.B = registers.P.B }.value
         registers.P.value = p
         // 下位バイトからpopしてPCへ
         val l = pop(bus, registers)
         val h = pop(bus, registers)
         val pc = (h.toUInt() shl 8) or (l.toUInt())
         registers.PC = pc.toUShort()
-        printMovePCLog(command = "RTI", beforePC = beforePC, registers = registers)
+        logMovePC(command = "RTI", beforePC = beforePC, registers = registers)
         return 0
     }
 }

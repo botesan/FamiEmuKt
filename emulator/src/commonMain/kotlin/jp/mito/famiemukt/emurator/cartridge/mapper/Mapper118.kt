@@ -6,6 +6,7 @@ import jp.mito.famiemukt.emurator.cartridge.StateObserver
 import jp.mito.famiemukt.emurator.cartridge.StateObserverAdapter
 import jp.mito.famiemukt.emurator.util.BIT_MASK_6
 import jp.mito.famiemukt.emurator.util.BIT_MASK_7
+import jp.mito.famiemukt.emurator.util.isBit
 
 /*
 https://www.nesdev.org/wiki/INES_Mapper_118
@@ -140,8 +141,8 @@ class Mapper118(
                         +--------- CHR ROM bank configuration (0: two 2 KB banks at $0000-$0FFF, four 1 KB banks at $1000-$1FFF;
                                                                1: four 1 KB banks at $0000-$0FFF, two 2 KB banks at $1000-$1FFF) */
                     selectedR = value.toInt() and 0x07
-                    isPRGMode0 = (value.toInt() and BIT_MASK_6.toInt() == 0)
-                    isCHRMode0 = (value.toInt() and BIT_MASK_7.toInt() == 0)
+                    isPRGMode0 = value.isBit(bitMask = BIT_MASK_6).not()
+                    isCHRMode0 = value.isBit(bitMask = BIT_MASK_7).not()
                 } else {
                     /* Bank data ($8001-$9FFF, odd)
                         7  bit  0

@@ -67,14 +67,14 @@ class PPUControl(private val internal: PPUInternalRegister) {
     var value: UByte = 0U
         set(value) {
             field = value
-            internal.setBaseNameTableAddress(value = value and (BIT_MASK_0 or BIT_MASK_1))
+            internal.setBaseNameTableAddress(value = (value.toByte().toInt() and (BIT_MASK_0 or BIT_MASK_1)).toUByte())
         }
-    val incrementSizePPUDATA: UByte get() = if ((value and BIT_MASK_2) == 0.toUByte()) 1U else 32U
-    val spritePatternTableAddress: Int get() = if ((value and BIT_MASK_3) == 0.toUByte()) 0x0000 else 0x1000
-    val backgroundPatternTableAddress: Int get() = if ((value and BIT_MASK_4) == 0.toUByte()) 0x0000 else 0x1000
-    val isSprite8x16: Boolean get() = ((value and BIT_MASK_5) != 0.toUByte())
-    private val isOutputColorOnEXTPins: Boolean get() = ((value and BIT_MASK_6) != 0.toUByte())
-    val isVerticalBlankingInterval: Boolean get() = ((value and BIT_MASK_7) != 0.toUByte())
+    val incrementSizePPUDATA: UByte get() = if (value.isBit(bitMask = BIT_MASK_2).not()) 1U else 32U
+    val spritePatternTableAddress: Int get() = if (value.isBit(bitMask = BIT_MASK_3).not()) 0x0000 else 0x1000
+    val backgroundPatternTableAddress: Int get() = if (value.isBit(bitMask = BIT_MASK_4).not()) 0x0000 else 0x1000
+    val isSprite8x16: Boolean get() = value.isBit(bitMask = BIT_MASK_5)
+    private val isOutputColorOnEXTPins: Boolean get() = value.isBit(bitMask = BIT_MASK_6)
+    val isVerticalBlankingInterval: Boolean get() = value.isBit(bitMask = BIT_MASK_7)
     override fun toString(): String =
         """
         |PPUControl(0x${value.toString(16).padStart(2, '0')})
@@ -103,14 +103,14 @@ BGRs bMmG
 +--------- Emphasize blue
  */
 data class PPUMask(var value: UByte = 0U) {
-    val isGrayscale: Boolean get() = ((value and BIT_MASK_0) != 0.toUByte())
-    val isShowBackgroundLeft8Pixels: Boolean get() = ((value and BIT_MASK_1) != 0.toUByte())
-    val isShowSpriteLeft8Pixels: Boolean get() = ((value and BIT_MASK_2) != 0.toUByte())
-    val isShowBackground: Boolean get() = ((value and BIT_MASK_3) != 0.toUByte())
-    val isShowSprite: Boolean get() = ((value and BIT_MASK_4) != 0.toUByte())
-    val isEmphasizeRed: Boolean get() = ((value and BIT_MASK_5) != 0.toUByte())
-    val isEmphasizeGreen: Boolean get() = ((value and BIT_MASK_6) != 0.toUByte())
-    val isEmphasizeBlue: Boolean get() = ((value and BIT_MASK_7) != 0.toUByte())
+    val isGrayscale: Boolean get() = value.isBit(bitMask = BIT_MASK_0)
+    val isShowBackgroundLeft8Pixels: Boolean get() = value.isBit(bitMask = BIT_MASK_1)
+    val isShowSpriteLeft8Pixels: Boolean get() = value.isBit(bitMask = BIT_MASK_2)
+    val isShowBackground: Boolean get() = value.isBit(bitMask = BIT_MASK_3)
+    val isShowSprite: Boolean get() = value.isBit(bitMask = BIT_MASK_4)
+    val isEmphasizeRed: Boolean get() = value.isBit(bitMask = BIT_MASK_5)
+    val isEmphasizeGreen: Boolean get() = value.isBit(bitMask = BIT_MASK_6)
+    val isEmphasizeBlue: Boolean get() = value.isBit(bitMask = BIT_MASK_7)
     override fun toString(): String =
         """
         |PPUMask(0x${value.toString(16).padStart(2, '0')})
@@ -152,18 +152,18 @@ data class PPUStatus(
     var isVerticalBlankHasStarted: Boolean = false,
 ) {
     val value: UByte
-        get() = (if (isSpriteOverflow) BIT_MASK_5 else 0U) or
-                (if (isSprite0Hit) BIT_MASK_6 else 0U) or
-                (if (isVerticalBlankHasStarted) BIT_MASK_7 else 0U)
+        get() = ((if (isSpriteOverflow) BIT_MASK_5 else 0) or
+                (if (isSprite0Hit) BIT_MASK_6 else 0) or
+                (if (isVerticalBlankHasStarted) BIT_MASK_7 else 0)).toUByte()
 }
 
 data class PPUScroll(val internal: PPUInternalRegister) {
     val tileAddress: Int by internal::tileAddress
     val attributeAddress: Int by internal::attributeAddress
-    val coarseX: UByte by internal::coarseX
-    val coarseY: UByte by internal::coarseY
-    val fineX: UByte by internal::fineX
-    val fineY: UByte by internal::fineY
+    val coarseX: Int by internal::coarseX
+    val coarseY: Int by internal::coarseY
+    val fineX: Int by internal::fineX
+    val fineY: Int by internal::fineY
     fun writeIO(value: UByte) = internal.setPPUScroll(value = value)
 }
 
@@ -188,25 +188,14 @@ yyy NN YYYYY XXXXX
 +++----------------- fine Y scroll
  */
 class PPUInternalRegister(
-
+    var v: UShort = 0U,
+    var t: UShort = 0u,
     var x: UByte = 0U,
     var w: Boolean = false,
     val a12: A12,
 ) {
     override fun toString(): String =
         "PPUInternalRegister(t=${t.toString(radix = 2)},v=${v.toString(radix = 2)},x=${x.toString(radix = 2)},w=$w)"
-
-    var v: UShort = 0U
-
-    //        set(value) {
-//            field = value
-//            a12.address = value.toInt()
-//        }
-    var t: UShort = 0u
-//        set(value) {
-//            field = value
-//            a12.address = value.toInt()
-//        }
 
     // https://www.nesdev.org/wiki/PPU_scrolling
     // tile address      = 0x2000 | (v & 0x0FFF)
@@ -220,16 +209,17 @@ class PPUInternalRegister(
                 ((v.toInt() and 0b000_00_11100_00000) shr 4) or
                 ((v.toInt() and 0b000_00_00000_11100) shr 2)
 
-    val coarseX: UByte
+    val coarseX: Int
         //get() = (v and 0b000_00_00000_11111U).toUByte()
-        get() = (v.toInt() and 0b000_00_00000_11111).toUByte()
-    val coarseY: UByte
+        get() = v.toInt() and 0b000_00_00000_11111
+    val coarseY: Int
         //get() = ((v and 0b000_00_11111_00000U).toUInt() shr 5).toUByte()
-        get() = ((v.toInt() and 0b000_00_11111_00000) shr 5).toUByte()
-    val fineX: UByte by ::x
-    val fineY: UByte
+        get() = (v.toInt() and 0b000_00_11111_00000) shr 5
+    val fineX: Int
+        get() = x.toInt()
+    val fineY: Int
         //get() = ((v and 0b111_00_00000_00000U).toUInt() shr 12).toUByte()
-        get() = ((v.toInt() and 0b111_00_00000_00000) shr 12).toUByte()
+        get() = (v.toInt() and 0b111_00_00000_00000) shr 12
 
     /* https://www.nesdev.org/wiki/PPU_scrolling
        t: ...GH.. ........ <- d: ......GH
@@ -237,7 +227,7 @@ class PPUInternalRegister(
        t: ... GH ..... ..... <- d: ......GH
             <used elsewhere> <- d: ABCDEF.. */
     fun setBaseNameTableAddress(value: UByte) {
-        t = (t and 0b111_00_11111_11111U) or (value.toUInt() shl 10).toUShort()
+        t = ((t.toInt() and 0b111_00_11111_11111) or (value.toInt() shl 10)).toUShort()
     }
 
     /*
@@ -250,14 +240,14 @@ class PPUInternalRegister(
     fun setPPUScroll(value: UByte) {
         if (w) {
             // Y
-            t = ((t.toUInt() and 0b000_11_00000_11111U) or
-                    ((value.toUInt() and 0b0000_0111U) shl 12) or
-                    ((value.toUInt() and 0b1111_1000U) shl 2)).toUShort()
+            t = ((t.toInt() and 0b000_11_00000_11111) or
+                    ((value.toInt() and 0b0000_0111) shl 12) or
+                    ((value.toInt() and 0b1111_1000) shl 2)).toUShort()
             w = false
         } else {
             // X
             x = value and 0b0111U
-            t = ((t.toUInt() and 0b111_11_11111_00000U) or (value.toUInt() shr 3)).toUShort()
+            t = ((t.toInt() and 0b111_11_11111_00000) or (value.toInt() shr 3)).toUShort()
             w = true
         }
     }
@@ -274,12 +264,12 @@ class PPUInternalRegister(
     fun setPPUAddress(value: UByte) {
         if (w) {
             // Low
-            t = (t and 0xFF_00U) or value.toUShort()
+            t = ((t.toInt() and 0xFF_00) or value.toInt()).toUShort()
             v = t
             w = false
         } else {
             // High
-            t = ((t and 0x00_FFU) or (value.toUInt() shl 8).toUShort()) and 0x3F_FFU
+            t = (((t.toInt() and 0x00_FF) or (value.toInt() shl 8)) and 0x3F_FF).toUShort()
             w = true
             // a12 // TODO: 動作確認
             a12.address = t.toInt()
@@ -295,8 +285,8 @@ class PPUInternalRegister(
          yyy NN YYYYY XXXXX       yyy NN YYYYY XXXXX
      */
     fun updateVForDot257OfEachScanline() {
-        v = /**/(v and 0b111_10_11111_00000U) or
-                (t and 0b000_01_00000_11111U)
+        v =/**/((v.toInt() and 0b111_10_11111_00000) or
+                (t.toInt() and 0b000_01_00000_11111)).toUShort()
     }
 
     /*
@@ -309,8 +299,8 @@ class PPUInternalRegister(
          yyy NN YYYYY XXXXX       yyy NN YYYYY XXXXX
      */
     fun updateVForDot280To304OfPreRenderScanline() {
-        v = /**/(v and 0b000_01_00000_11111U) or
-                (t and 0b111_10_11111_00000U)
+        v =/**/((v.toInt() and 0b000_01_00000_11111) or
+                (t.toInt() and 0b111_10_11111_00000)).toUShort()
     }
 
     /*
@@ -326,11 +316,11 @@ class PPUInternalRegister(
           v += 1                // increment coarse X
      */
     fun incrementCoarseX() {
-        if ((v and 0x001FU) == 31.toUShort()) {
-            v = v and 0x001F.toUShort().inv()
-            v = v xor 0x0400.toUShort()
+        v = if ((v.toInt() and 0x001F) == 31) {
+            ((v.toInt() and 0x001F.inv()) xor 0x0400).toUShort()
         } else {
-            v++
+            // 代入無しでv++のみだとif文の式の値としてUShortがBox化されてインスタンスが生成されるため手動で計算する
+            (v.toInt() + 1).toUShort()
         }
     }
 
@@ -355,15 +345,15 @@ class PPUInternalRegister(
           v = (v & ~0x03E0) | (y << 5)     // put coarse Y back into v
      */
     fun incrementY() {
-        if (v and 0x7000U != 0x7000.toUShort()) {
-            v = (v + 0x1000U).toUShort()
+        if (v.toInt() and 0x7000 != 0x7000) {
+            v = (v.toInt() + 0x1000).toUShort()
         } else {
-            v = v and 0x7000.toUShort().inv()
-            val y = (v.toUInt() and 0x03E0U) shr 5
+            v = (v.toInt() and 0x7000.inv()).toUShort()
+            val y = (v.toInt() and 0x03E0) shr 5
             v = when (y) {
-                29U -> ((v xor 0x0800U) and 0x03E0.toUShort().inv())
-                31U -> (v and 0x03E0.toUShort().inv())
-                else -> (v and 0x03E0.toUShort().inv()) or ((y + 1U) shl 5).toUShort()
+                29 -> ((v.toInt() xor 0x0800) and 0x03E0.inv()).toUShort()
+                31 -> (v.toInt() and 0x03E0.inv()).toUShort()
+                else -> ((v.toInt() and 0x03E0.inv()) or ((y + 1) shl 5)).toUShort()
             }
         }
     }

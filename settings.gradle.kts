@@ -8,4 +8,4 @@ pluginManagement {
 }
 
 rootProject.name = "FamiEmuKt"
-include(":emulator", ":desktopApp")
+include(":emulator", ":desktopApp", "androidApp")

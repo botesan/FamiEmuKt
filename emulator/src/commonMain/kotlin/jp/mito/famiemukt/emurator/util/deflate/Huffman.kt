@@ -1,5 +1,7 @@
 package jp.mito.famiemukt.emurator.util.deflate
 
+import co.touchlab.kermit.Logger
+
 interface Huffman {
     fun setBitLengths(bitLengths: List<Int>)
     fun read(from: BitReader): Int
@@ -11,7 +13,7 @@ fun Huffman(optimized: Boolean = false): Huffman = if (optimized) TODO() else No
 
 private const val DEBUG_LOG = false
 private inline fun debugLog(message: () -> String) {
-    if (DEBUG_LOG) println(message())
+    if (DEBUG_LOG) Logger.d { message() }
 }
 
 private class NormalHuffmanImpl : Huffman {

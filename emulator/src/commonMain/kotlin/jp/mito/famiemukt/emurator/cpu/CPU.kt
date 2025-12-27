@@ -1,5 +1,6 @@
 package jp.mito.famiemukt.emurator.cpu
 
+import co.touchlab.kermit.Logger
 import jp.mito.famiemukt.emurator.NTSC_CPU_CYCLES_PER_MASTER_CLOCKS
 import jp.mito.famiemukt.emurator.cartridge.NothingStateM2CycleObserver
 import jp.mito.famiemukt.emurator.cartridge.StateM2CycleObserver
@@ -19,16 +20,6 @@ class CPU(
     private val dma: DMA,
     private val stateObserver: StateM2CycleObserver = NothingStateM2CycleObserver,
 ) {
-    data class CPUResult(
-        val addCycle: Int = 0,
-        val branched: Boolean = false,
-        val instruction: Instruction? = null,
-        val interrupt: InterruptType? = null,
-    ) {
-        val executeCycle: Int
-            get() = addCycle + (instruction?.cycle ?: 0) + (interrupt?.executeCycle ?: 0)
-    }
-
     /** 電源投入時 */
     fun setPowerOnState() {
         executeInterrupt(type = InterruptType.RESET, cpuBus, cpuRegisters)
@@ -83,7 +74,7 @@ class CPU(
         // DMAの処理待ち
         if (dma.executeCPUCycleStepIfNeed(cpuBus = cpuBus, currentCPUCycles = totalCPUClockCount)) {
             executingCPUClockCount--
-            return CPUResult(addCycle = 1)
+            return CPUResult.obtain(addCycle = 1)
         }
         // 割り込みがポーリングしていれば割り込みを実行（次の命令を実行する前に実行）
         // https://www.nesdev.org/wiki/CPU_interrupts
@@ -104,7 +95,7 @@ class CPU(
                 executingCPUClockCount = 0
                 this.polledInterrupt = null
                 this.executingInterrupt = null
-                return CPUResult(interrupt = executingInterrupt)
+                return CPUResult.obtain(interrupt = executingInterrupt)
             } else {
                 // 割り込み実行対象設定
                 executingCPUClockCount = 1
@@ -119,8 +110,8 @@ class CPU(
             val instruction = Instructions[opcode.toInt()]
             // executingCPUClockCount = 1 // すでに 1 になっているはず
             when {
-                instruction.opCode === JAM -> println("${instruction.opCode} instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}")
-                instruction.isUnofficial -> println("Unofficial instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}")
+                instruction.opCode === JAM -> Logger.d { "${instruction.opCode} instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}" }
+                instruction.isUnofficial -> Logger.d { "Unofficial instruction : ${opcode.toHex()} / $instruction / pc=${cpuRegisters.PC.toHex()}" }
                 else -> Unit
             }
             this.fetchedInstruction = instruction
@@ -142,7 +133,7 @@ class CPU(
             val result = fetchedInstruction.opCode.execute(fetchedInstruction, cpuBus, cpuRegisters)
             val addCycle = result and 0x0000_FFFF
             val branched = (result and 0x0001_0000) != 0
-            val executingInstruction = CPUResult(
+            val executingInstruction = CPUResult.obtain(
                 addCycle = addCycle,
                 branched = branched,
                 instruction = fetchedInstruction,
@@ -222,11 +213,11 @@ class CPU(
             // 割り込みの乗っ取り処理（BRK <= NMI,IRQ）
             instruction.opCode === BRK -> {
                 if (isRequestedNMI) {
-                    println("BRK <= NMI 1 $totalCPUClockCount")
+                    Logger.d { "BRK <= NMI 1 $totalCPUClockCount" }
                     // BRK実行前状態、乗っ取り割り込み保持
                     hijackInterrupt = InterruptType.NMI
                 } else if (isRequestedIRQ) {
-                    println("BRK <= IRQ 1 $totalCPUClockCount")
+                    Logger.d { "BRK <= IRQ 1 $totalCPUClockCount" }
                     // BRK実行前状態、乗っ取り割り込み保持
                     hijackInterrupt = InterruptType.IRQ
                 }
@@ -240,11 +231,11 @@ class CPU(
         if (instruction.opCode === BRK) {
             // BRK実行後状態、割り込みの乗っ取り処理（BRK <= NMI,IRQ）
             if (interrupt === InterruptType.NMI) {
-                println("BRK <= NMI 2 $totalCPUClockCount")
+                Logger.d { "BRK <= NMI 2 $totalCPUClockCount" }
                 // 呼び出しアドレスをNMIに変更
                 cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
             } else if (interrupt === InterruptType.IRQ) {
-                println("BRK <= IRQ 2 $totalCPUClockCount")
+                Logger.d { "BRK <= IRQ 2 $totalCPUClockCount" }
                 // BRK実行後状態、呼び出しアドレスをIRQに変更（実質変更無し）
                 cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_IRQ)
             }
@@ -262,7 +253,7 @@ class CPU(
             executingCPUClockCount !in 1..4 -> Unit
             // 割り込みの乗っ取り処理（IRQ <= NMI）
             interrupt === InterruptType.IRQ && isRequestedNMI -> {
-                println("IRQ <= NMI 1 $totalCPUClockCount")
+                Logger.d { "IRQ <= NMI 1 $totalCPUClockCount" }
                 // IQR実行前状態、乗っ取り割り込み保持
                 hijackInterrupt = InterruptType.NMI
             }
@@ -275,7 +266,7 @@ class CPU(
         when {
             // 割り込みの乗っ取り処理（IRQ <= NMI）
             interrupt === InterruptType.IRQ && hijackInterrupt === InterruptType.NMI -> {
-                println("IRQ <= NMI 2 $totalCPUClockCount")
+                Logger.d { "IRQ <= NMI 2 $totalCPUClockCount" }
                 // IRQ実行後状態、呼び出しアドレスをNMIに変更
                 cpuRegisters.PC = cpuBus.readWordMemIO(address = INTERRUPT_ADDRESS_NMI)
             }

@@ -1,5 +1,6 @@
 package jp.mito.famiemukt.emurator.cartridge
 
+import co.touchlab.kermit.Logger
 import jp.mito.famiemukt.emurator.cartridge.CartridgeImpl.Information
 import jp.mito.famiemukt.emurator.cartridge.mapper.Mapper
 
@@ -211,7 +212,7 @@ fun Cartridge(backupRAM: BackupRAM, iNesData: ByteArray): Cartridge {
         isPrgRamPresent = isPrgRamPresent,
         isHasBusConflicts = isHasBusConflicts,
     )
-    println(
+    Logger.d {
         """
         |[cartridge]
         |${
@@ -220,7 +221,7 @@ fun Cartridge(backupRAM: BackupRAM, iNesData: ByteArray): Cartridge {
         }
         |${information}
         |""".trimMargin().trim()
-    )
+    }
     check(value = information.trainer.not()) { "Not support trainer." }
     return CartridgeImpl(
         information = information,

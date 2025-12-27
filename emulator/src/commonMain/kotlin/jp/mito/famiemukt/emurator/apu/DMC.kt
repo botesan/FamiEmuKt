@@ -90,7 +90,7 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
     }
 
     private var timerCounter: Int = 0
-    private var sampleBuffer: Int? = null
+    private var sampleBuffer: Int = Int.MIN_VALUE // Box化されてIntegerインスタンスが増えるので、nullで管理しない
     private var isSilent: Boolean = false
 
     // メモリーリーダー
@@ -166,12 +166,12 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
             if (remainCounter == 0) {
                 remainCounter = 8
                 val sampleBuffer = sampleBuffer
-                if (sampleBuffer == null) {
+                if (sampleBuffer == Int.MIN_VALUE) {
                     isSilent = true
                 } else {
                     isSilent = false
                     shiftRegister = sampleBuffer
-                    this.sampleBuffer = null
+                    this.sampleBuffer = Int.MIN_VALUE
                     fillingBufferIfNeeded(isReload = true)
                 }
             }
@@ -201,7 +201,7 @@ class DMC(private val interrupter: Interrupter, private val dma: DMA) : AudioCha
         private set
 
     private fun fillingBufferIfNeeded(isReload: Boolean) {
-        if (sampleBuffer == null && length > 0) {
+        if (sampleBuffer == Int.MIN_VALUE && length > 0) {
             dma.copyDMCSampleBuffer(address, isReload) { sampleBuffer = it.toInt() }
             if (++address > 0xFFFF) address = 0x8000
             if (--length == 0) {

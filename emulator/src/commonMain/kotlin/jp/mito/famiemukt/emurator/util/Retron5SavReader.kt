@@ -1,5 +1,6 @@
 package jp.mito.famiemukt.emurator.util
 
+import co.touchlab.kermit.Logger
 import jp.mito.famiemukt.emurator.cartridge.BackupRAM
 import jp.mito.famiemukt.emurator.util.crc32.calcCRC32
 import jp.mito.famiemukt.emurator.util.deflate.Deflate
@@ -36,8 +37,8 @@ fun loadRetron5SavFile(input: ByteArray): BackupRAM {
     val crc32 = headerBuffer.readIntLe()
     //
     val firstData = headerBuffer.readByteArray(byteCount = 16)
-    println("First data:")
-    println(firstData.asUByteArray().joinToString { it.toString(radix = 16).padStart(2, '0') })
+    Logger.d { "First data:" }
+    Logger.d { firstData.asUByteArray().joinToString { it.toString(radix = 16).padStart(2, '0') } }
     //
     buffer.skip(byteCount = dataOffset.toLong())
     val dataSize = buffer.size
@@ -57,8 +58,8 @@ fun loadRetron5SavFile(input: ByteArray): BackupRAM {
     }
     val dataCRC32 = calcCRC32(data).toInt()
     check(value = crc32 == dataCRC32) { "Illegal CRC. ${crc32.toUShort().toHex()}, ${dataCRC32.toUShort().toHex()}" }
-    println("$magic $fmtVer $flags $origSize $packedSize $dataOffset $crc32 $dataSize ${data.size}")
-    println(
+    Logger.d { "$magic $fmtVer $flags $origSize $packedSize $dataOffset $crc32 $dataSize ${data.size}" }
+    Logger.d {
         data.asUByteArray().asSequence().windowed(size = 0x0400, step = 0x0400, partialWindows = true)
             .joinToString(separator = "\n---\n") { part ->
                 part.windowed(size = 0x20, step = 0x20, partialWindows = true)
@@ -68,6 +69,6 @@ fun loadRetron5SavFile(input: ByteArray): BackupRAM {
                         }
                     }
             }
-    )
+    }
     return BackupRAM(initData = data.asUByteArray())
 }

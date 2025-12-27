@@ -17,10 +17,13 @@ object BCC : BranchOpCode(name = "BCC", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.C) {
+            operand.recycle()
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1 or 0x0001_0000
+            val addCycle = operand.addCycle
+            operand.recycle()
+            addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -30,10 +33,13 @@ object BCS : BranchOpCode(name = "BCS", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.C.not()) {
+            operand.recycle()
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1 or 0x0001_0000
+            val addCycle = operand.addCycle
+            operand.recycle()
+            addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -43,10 +49,13 @@ object BEQ : BranchOpCode(name = "BEQ", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.Z.not()) {
+            operand.recycle()
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1 or 0x0001_0000
+            val addCycle = operand.addCycle
+            operand.recycle()
+            addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -56,10 +65,13 @@ object BMI : BranchOpCode(name = "BMI", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.N.not()) {
+            operand.recycle()
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1 or 0x0001_0000
+            val addCycle = operand.addCycle
+            operand.recycle()
+            addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -69,10 +81,13 @@ object BNE : BranchOpCode(name = "BNE", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.Z) {
+            operand.recycle()
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1 or 0x0001_0000
+            val addCycle = operand.addCycle
+            operand.recycle()
+            addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -82,10 +97,13 @@ object BPL : BranchOpCode(name = "BPL", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.N) {
+            operand.recycle()
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1 or 0x0001_0000
+            val addCycle = operand.addCycle
+            operand.recycle()
+            addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -95,10 +113,13 @@ object BVC : BranchOpCode(name = "BVC", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.V) {
+            operand.recycle()
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1 or 0x0001_0000
+            val addCycle = operand.addCycle
+            operand.recycle()
+            addCycle + 1 or 0x0001_0000
         }
     }
 }
@@ -108,10 +129,13 @@ object BVS : BranchOpCode(name = "BVS", isAddCyclePageCrossed = true) {
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         val operand = instruction.addressing.operand(bus, registers)
         return if (registers.P.V.not()) {
+            operand.recycle()
             0
         } else {
             registers.PC = operand.operand.toUShort()
-            operand.addCycle + 1 or 0x0001_0000
+            val addCycle = operand.addCycle
+            operand.recycle()
+            addCycle + 1 or 0x0001_0000
         }
     }
 }

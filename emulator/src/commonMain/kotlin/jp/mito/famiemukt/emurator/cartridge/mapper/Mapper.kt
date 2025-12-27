@@ -1,5 +1,6 @@
 package jp.mito.famiemukt.emurator.cartridge.mapper
 
+import co.touchlab.kermit.Logger
 import jp.mito.famiemukt.emurator.cartridge.Cartridge
 import jp.mito.famiemukt.emurator.cartridge.Mirroring
 import jp.mito.famiemukt.emurator.cartridge.NothingStateObserver
@@ -56,22 +57,28 @@ abstract class MapperBase(protected val cartridge: Cartridge) : Mapper {
     override val stateObserver: StateObserver = NothingStateObserver
 
     override fun writePRG(address: Int, value: UByte) {
-        val v = value.toString(16).padStart(2, '0')
-        println("PRG RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v")
+        Logger.d {
+            val v = value.toString(16).padStart(2, '0')
+            "PRG RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v"
+        }
     }
 
     override fun writeCHR(address: Int, value: UByte) {
-        val v = value.toString(16).padStart(2, '0')
-        println("CHR RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v")
+        Logger.d {
+            val v = value.toString(16).padStart(2, '0')
+            "CHR RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v"
+        }
     }
 
     override fun writeExt(address: Int, value: UByte) {
-        val v = value.toString(16).padStart(2, '0')
-        println("拡張RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v")
+        Logger.d {
+            val v = value.toString(16).padStart(2, '0')
+            "拡張RAMは標準で未実装 ${address.toString(16).padStart(4, '0')} <= $v"
+        }
     }
 
     override fun readExt(address: Int): UByte {
-        println("拡張RAMは標準で未実装 ${address.toString(16).padStart(4, '0')}")
+        Logger.d { "拡張RAMは標準で未実装 ${address.toString(16).padStart(4, '0')}" }
         return 0xFFu
     }
 

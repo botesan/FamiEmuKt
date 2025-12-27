@@ -1,5 +1,8 @@
 package jp.mito.famiemukt.test
 
+import co.touchlab.kermit.CommonWriter
+import co.touchlab.kermit.Logger
+import co.touchlab.kermit.Severity
 import jp.mito.famiemukt.emurator.cpu.CPUBus
 import jp.mito.famiemukt.emurator.cpu.CPURegisters
 import jp.mito.famiemukt.emurator.cpu.Instruction
@@ -9,6 +12,12 @@ import jp.mito.famiemukt.emurator.cpu.instruction.*
 import kotlin.test.*
 
 class InstructionsTest {
+    @BeforeTest
+    fun setup() {
+        Logger.setLogWriters(CommonWriter())
+        Logger.setMinSeverity(Severity.Info)
+    }
+
     @Test
     fun testInstructionsCount() {
         assertEquals(expected = 256, actual = Instructions.size)

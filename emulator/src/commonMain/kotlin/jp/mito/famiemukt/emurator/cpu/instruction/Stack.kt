@@ -24,9 +24,10 @@ object PHA : OfficialOpCode(name = "PHA", isAddCyclePageCrossed = false) {
 /* PHP Pをスタックにプッシュダウンします。[0.0.0.0.0.0.0.0]
    The status register will be pushed with the break flag and bit 5 set to 1. */
 object PHP : OfficialOpCode(name = "PHP", isAddCyclePageCrossed = false) {
+    private val work = ProcessorStatus()
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         // break flagをセット、bit 5 は予約で 1 セット済み（のはず）
-        val value = registers.P.copy().apply { B = true }.value
+        val value = work.also { it.value = registers.P.value; it.B = true }.value
         push(value = value, bus, registers)
         return 0
     }
@@ -46,10 +47,11 @@ object PLA : OfficialOpCode(name = "PLA", isAddCyclePageCrossed = false) {
 /* PLP スタックからPにポップアップします。[N.V.R.B.D.I.Z.C]
    The status register will be pulled with the break flag and bit 5 ignored. */
 object PLP : OfficialOpCode(name = "PLP", isAddCyclePageCrossed = false) {
+    private val work = ProcessorStatus()
     override fun execute(instruction: Instruction, bus: CPUBus, registers: CPURegisters): Int {
         // break flag と bit 5 を無視（実質break flagを変更前で上書き）
         val value = pop(bus, registers)
-        val result = ProcessorStatus(value = value).apply { B = registers.P.B }.value
+        val result = work.also { it.value = value; it.init(); it.B = registers.P.B }.value
         registers.P.value = result
         return 0
     }

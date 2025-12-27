@@ -1,5 +1,9 @@
 package jp.mito.famiemukt.test
 
+import co.touchlab.kermit.CommonWriter
+import co.touchlab.kermit.Logger
+import co.touchlab.kermit.Severity
+import com.goncalossilva.resources.Resource
 import jp.mito.famiemukt.emurator.NTSC_CPU_CYCLES_PER_MASTER_CLOCKS
 import jp.mito.famiemukt.emurator.apu.APU
 import jp.mito.famiemukt.emurator.apu.AudioSampleNotifier
@@ -14,25 +18,31 @@ import jp.mito.famiemukt.emurator.ppu.PPUBus
 import jp.mito.famiemukt.emurator.ppu.PPURegisters
 import jp.mito.famiemukt.emurator.ppu.VideoRAM
 import jp.mito.famiemukt.emurator.util.VisibleForTesting
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 
 @OptIn(ExperimentalUnsignedTypes::class, VisibleForTesting::class)
 class SomeRomTest {
+    @BeforeTest
+    fun setup() {
+        Logger.setLogWriters(CommonWriter())
+        Logger.setMinSeverity(Severity.Info)
+    }
+
     @Test
     fun testHelloWorld() {
         var cpu: CPU? = null
         val ram = RAM()
-        val iNesData = assertNotNull(actual = javaClass.classLoader.getResource("sample1/sample1.nes")).readBytes()
+        val iNesData = Resource(path = "sample1/sample1.nes").readBytes()
         val backupRAM = BackupRAM()
         val cartridge = Cartridge(backupRAM = backupRAM, iNesData = iNesData)
         val stateObserver = cartridge.mapper.stateObserver
         val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
         val cpuRegisters = CPURegisters()
-        val ppuRegisters = PPURegisters(a12 = a12)
+        val ppuRegisters = PPURegisters.Companion(a12 = a12)
         val ppuBus = PPUBus(mapper = cartridge.mapper, videoRAM = videoRAM)
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
@@ -59,7 +69,7 @@ class SomeRomTest {
             }, audioSamplingRate = 11_500
         )
         val pad = Pad()
-        val cpuBus = CPUBus(mapper = cartridge.mapper, dma = dma, ram = ram, apu = apu, ppu = ppu, pad = pad)
+        val cpuBus = CPUBus.Companion(mapper = cartridge.mapper, dma = dma, ram = ram, apu = apu, ppu = ppu, pad = pad)
         cpu = CPU(cpuRegisters = cpuRegisters, cpuBus = cpuBus, dma = dma)
         cpu.setPowerOnState()
         try {
@@ -72,10 +82,10 @@ class SomeRomTest {
                     if (result?.instruction != null) break
                 }
                 assertContains(range = 0x8000U..0xffffU, value = cpuRegisters.PC.toUInt())
-                println(cpuRegisters.logString)
+                Logger.d { cpuRegisters.logString }
             } while (cpuRegisters.PC != beforePC)
         } finally {
-            println(
+            Logger.d {
                 """
                 |cartridge=${cartridge.information}
                 |cpuRegisters=$cpuRegisters
@@ -90,7 +100,7 @@ class SomeRomTest {
                     }
                 }
                 |""".trimMargin().trimMargin()
-            )
+            }
         }
     }
 
@@ -106,42 +116,40 @@ class SomeRomTest {
             val ppuX: Int,
         )
 
-        val exceptedSequence =
-            assertNotNull(actual = javaClass.classLoader.getResource("nes-test-roms/other/nestest.log"))
-                .readText()
-                .lineSequence()
-                .filter { it.isNotEmpty() }
-                .mapIndexed { index, line ->
-                    @Suppress("ReplaceSubstringWithTake")
-                    Excepted(
-                        lineNo = index + 1, line = line,
-                        commandName = line.substring(startIndex = 16, endIndex = 19),
-                        cpuRegisters = CPURegisters(
-                            A = line.substring(startIndex = 50, endIndex = 52).toUByte(radix = 16),
-                            X = line.substring(startIndex = 55, endIndex = 57).toUByte(radix = 16),
-                            Y = line.substring(startIndex = 60, endIndex = 62).toUByte(radix = 16),
-                            PC = line.substring(startIndex = 0, endIndex = 4).toUShort(radix = 16),
-                            S = line.substring(startIndex = 71, endIndex = 73).toUByte(radix = 16),
-                            P = ProcessorStatus(
-                                value = line.substring(startIndex = 65, endIndex = 67).toUByte(radix = 16)
-                            ),
+        val exceptedSequence = Resource(path = "nes-test-roms/other/nestest.log")
+            .readText()
+            .lineSequence()
+            .filter { it.isNotEmpty() }
+            .mapIndexed { index, line ->
+                @Suppress("ReplaceSubstringWithTake")
+                Excepted(
+                    lineNo = index + 1, line = line,
+                    commandName = line.substring(startIndex = 16, endIndex = 19),
+                    cpuRegisters = CPURegisters(
+                        A = line.substring(startIndex = 50, endIndex = 52).toUByte(radix = 16),
+                        X = line.substring(startIndex = 55, endIndex = 57).toUByte(radix = 16),
+                        Y = line.substring(startIndex = 60, endIndex = 62).toUByte(radix = 16),
+                        PC = line.substring(startIndex = 0, endIndex = 4).toUShort(radix = 16),
+                        S = line.substring(startIndex = 71, endIndex = 73).toUByte(radix = 16),
+                        P = ProcessorStatus(
+                            value = line.substring(startIndex = 65, endIndex = 67).toUByte(radix = 16)
                         ),
-                        cpuCycles = line.substring(startIndex = 90).toInt(),
-                        ppuY = line.substring(startIndex = 78, endIndex = 81).trim().toInt(),
-                        ppuX = line.substring(startIndex = 82, endIndex = 85).trim().toInt(),
-                    )
-                }
+                    ),
+                    cpuCycles = line.substring(startIndex = 90).toInt(),
+                    ppuY = line.substring(startIndex = 78, endIndex = 81).trim().toInt(),
+                    ppuX = line.substring(startIndex = 82, endIndex = 85).trim().toInt(),
+                )
+            }
         var cpu: CPU? = null
         val ram = RAM()
         val backupRAM = BackupRAM()
-        val iNesData =
-            assertNotNull(actual = javaClass.classLoader.getResource("nes-test-roms/other/nestest.nes")).readBytes()
+        val iNesData = Resource(path = "nes-test-roms/other/nestest.nes").readBytes()
         val cartridge = Cartridge(backupRAM = backupRAM, iNesData = iNesData)
         val stateObserver = cartridge.mapper.stateObserver
         val a12 = A12(stateObserver = stateObserver)
         val videoRAM = VideoRAM()
         val cpuRegisters = CPURegisters()
-        val ppuRegisters = PPURegisters(a12 = a12)
+        val ppuRegisters = PPURegisters.Companion(a12 = a12)
         val ppuBus = PPUBus(mapper = cartridge.mapper, videoRAM = videoRAM)
         val ppu = PPU(
             ppuRegisters = ppuRegisters,
@@ -168,7 +176,7 @@ class SomeRomTest {
             }, audioSamplingRate = 11_500
         )
         val pad = Pad()
-        val cpuBus = CPUBus(mapper = cartridge.mapper, dma = dma, ram = ram, apu = apu, ppu = ppu, pad = pad)
+        val cpuBus = CPUBus.Companion(mapper = cartridge.mapper, dma = dma, ram = ram, apu = apu, ppu = ppu, pad = pad)
         cpu = CPU(cpuRegisters = cpuRegisters, cpuBus = cpuBus, dma = dma)
         cpu.setPowerOnState()
         cpuRegisters.PC = 0xc000U
@@ -176,10 +184,10 @@ class SomeRomTest {
         repeat(cycles * NTSC_CPU_CYCLES_PER_MASTER_CLOCKS) { ppu.executeMasterClockStep() }
         try {
             exceptedSequence.forEach { expected ->
-                println("[${expected.lineNo}]-------------------------------------------------------------------------------")
-                println(expected.line)
-                println("expected ${expected.cpuRegisters.logString} | actual ${cpuRegisters.logString}")
-                println("expected ppuX:${expected.ppuX} ${expected.ppuY} | actual ppuX=${ppu._ppuX} ppuY=${ppu._ppuY}")
+                Logger.d { "[${expected.lineNo}]-------------------------------------------------------------------------------" }
+                Logger.d { expected.line }
+                Logger.d { "expected ${expected.cpuRegisters.logString} | actual ${cpuRegisters.logString}" }
+                Logger.d { "expected ppuX:${expected.ppuX} ${expected.ppuY} | actual ppuX=${ppu._ppuX} ppuY=${ppu._ppuY}" }
                 //
                 assertEquals(expected = expected.cpuRegisters.PC, actual = cpuRegisters.PC)
                 assertEquals(expected = expected.cpuRegisters.A, actual = cpuRegisters.A)
@@ -199,7 +207,7 @@ class SomeRomTest {
                     apu.executeMasterClockStep()
                     if (result == null) continue
                     cycles += result.executeCycle
-                    println(result)
+                    Logger.d { result.toString() }
                     assertEquals(expected = expected.commandName, actual = result.instruction?.opCode?.name)
                     assertEquals(
                         expected = result.executeCycle * NTSC_CPU_CYCLES_PER_MASTER_CLOCKS,
@@ -209,13 +217,13 @@ class SomeRomTest {
                 }
             }
         } finally {
-            println(
+            Logger.d {
                 """
                 |cartridge=${cartridge.information}
                 |cpuRegisters=$cpuRegisters
                 |ppuRegisters=$ppuRegisters
                 |""".trimMargin().trimMargin()
-            )
+            }
         }
     }
 
